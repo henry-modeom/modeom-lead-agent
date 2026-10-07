@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Modeom · Leads</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">Modeom <span>Leads</span></div>
+    <div class="meta" id="meta"></div>
+  </header>
+
+  <main class="layout">
+    <aside class="sidebar">
+      <form id="profile-form" class="card">
+        <h2>Profil cible</h2>
+        <label>Ce que Modeom vend *
+          <textarea name="offer" rows="2" required placeholder="Ex. : sites web et identité visuelle pour PME"></textarea>
+        </label>
+        <label>Client idéal *
+          <textarea name="target" rows="2" required placeholder="Ex. : PME du BTP qui n'ont pas de site moderne"></textarea>
+        </label>
+        <label>Secteurs<input name="sectors" placeholder="BTP, artisans, architectes…"></label>
+        <label>Zones<input name="locations" placeholder="Lyon et Rhône (69)"></label>
+        <label>Taille<input name="company_sizes" placeholder="10 à 100 salariés"></label>
+        <label>Décideurs<input name="decision_makers" placeholder="Gérant, directeur marketing"></label>
+        <label>Signaux d'achat<input name="signals" placeholder="Recrute, site daté, nouvelle agence…"></label>
+        <label>Exclusions<input name="exclusions" placeholder="Agences concurrentes, grands groupes"></label>
+        <label>Nombre de leads<input name="lead_count" type="number" min="1" max="50" value="15"></label>
+        <button type="submit" id="submit-btn">Lancer la recherche</button>
+      </form>
+
+      <section class="card">
+        <h2>Historique</h2>
+        <ul id="history" class="history"></ul>
+      </section>
+    </aside>
+
+    <section class="content">
+      <div id="empty" class="empty card">
+        <h2>Aucune recherche sélectionnée</h2>
+        <p>Décrivez votre cible à gauche puis lancez une recherche. Les leads s'affichent ici au fil de l'eau, classés par pertinence.</p>
+      </div>
+
+      <div id="search-view" hidden>
+        <div class="card status-card">
+          <div class="status-head">
+            <div>
+              <h2 id="search-title"></h2>
+              <span id="search-status" class="badge"></span>
+            </div>
+            <div class="actions">
+              <label class="inline">Score min.
+                <input id="min-score" type="range" min="0" max="100" value="0">
+                <output id="min-score-value">0</output>
+              </label>
+              <a id="export-link" class="button secondary" href="#">Exporter CSV</a>
+            </div>
+          </div>
+          <details>
+            <summary>Journal de l'agent</summary>
+            <ol id="events" class="events"></ol>
+          </details>
+          <p id="summary" class="summary"></p>
+        </div>
+
+        <div id="leads" class="leads"></div>
+      </div>
+    </section>
+  </main>
+
+  <template id="lead-template">
+    <article class="lead card">
+      <div class="score"></div>
+      <div class="lead-body">
+        <div class="lead-head">
+          <h3 class="company"></h3>
+          <span class="tags"></span>
+        </div>
+        <p class="contact"></p>
+        <p class="reason"></p>
+        <ul class="signals"></ul>
+        <blockquote class="hook"></blockquote>
+        <div class="links"></div>
+      </div>
+    </article>
+  </template>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
