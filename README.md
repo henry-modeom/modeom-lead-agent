@@ -30,6 +30,12 @@ Ouvrez ensuite <http://localhost:8000>.
 
 ## Utilisation
 
+Le formulaire est pré-rempli avec le profil de Modeom, établi d'après modeom.fr : modules préfabriqués en
+béton (garages, abris vélos, locaux poubelles, locaux techniques) pour promoteurs, bailleurs sociaux,
+investisseurs et syndics, avec Auvergne-Rhône-Alpes en priorité. Modifiez-le librement : le profil
+saisi est mémorisé par le navigateur. Le profil par défaut se trouve dans `static/app.js`
+(`DEFAULT_PROFILE`).
+
 1. Décrivez à gauche ce que Modeom vend et votre client idéal. Secteurs, zones, taille, décideurs,
    signaux et exclusions sont facultatifs mais affinent nettement les résultats. Le navigateur
    mémorise le profil saisi.

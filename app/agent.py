@@ -11,8 +11,9 @@ puis enregistrer chaque lead avec l'outil save_lead, avec un score de pertinence
 
 Méthode :
 1. Pars du profil cible et varie les angles : recherche web (annuaires sectoriels, articles de \
-presse locale, offres d'emploi, salons, classements), annuaire officiel des entreprises françaises, \
-et Google Maps s'il est disponible pour les entreprises locales.
+presse locale, offres d'emploi, salons, classements, appels d'offres publics comme le BOAMP, \
+annonces de permis de construire et de programmes immobiliers), annuaire officiel des entreprises \
+françaises, et Google Maps s'il est disponible pour les entreprises locales.
 2. Vérifie chaque entreprise : qu'elle existe et est active (SIREN via l'annuaire quand c'est une \
 entreprise française), son site, sa taille, son activité réelle.
 3. Trouve le décideur correspondant aux postes visés. Pour LinkedIn, utilise la recherche web \

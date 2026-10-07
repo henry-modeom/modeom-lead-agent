@@ -29,14 +29,33 @@ function safeUrl(url) {
   try { return new URL(full).protocol.startsWith("http") ? full : ""; } catch { return ""; }
 }
 
+// Profil par défaut, d'après modeom.fr : garages préfabriqués en béton (Chaponnay, 69).
+const DEFAULT_PROFILE = {
+  offer: "Modules préfabriqués monocoques en béton armé, livrés et posés clés en main : garages "
+    + "(individuels, doubles, en batterie), abris vélos, locaux poubelles, locaux techniques. "
+    + "25 % moins chers qu'une construction traditionnelle, pose rapide, zéro déchet sur chantier.",
+  target: "Professionnels de l'immobilier qui doivent livrer des garages ou des annexes sur leurs "
+    + "programmes ou leur patrimoine : promoteurs, bailleurs sociaux, investisseurs, syndics de copropriété.",
+  sectors: "Promotion immobilière, bailleurs sociaux (OPH, ESH), investisseurs immobiliers, syndics, "
+    + "lotisseurs, constructeurs de maisons individuelles, collectivités",
+  locations: "Auvergne-Rhône-Alpes en priorité (Rhône, Isère, Ain, Loire), puis grand quart sud-est",
+  company_sizes: "Toutes tailles, à partir de 5 salariés",
+  decision_makers: "Directeur de programmes, responsable technique, directeur du patrimoine, "
+    + "responsable maintenance, chargé d'opérations, gérant",
+  signals: "Permis de construire ou programme de logements annoncé, appel d'offres pour garages, "
+    + "locaux vélos ou locaux poubelles, réhabilitation de résidence, lotissement en commercialisation, "
+    + "obligation de stationnement vélo",
+  exclusions: "Fabricants concurrents de garages préfabriqués ou de modules béton, particuliers",
+  lead_count: 15,
+};
+
 // Profil : mémorisé dans le navigateur pour ne pas le ressaisir.
 function restoreProfile() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(PROFILE_KEY) || "{}");
-    for (const [key, value] of Object.entries(saved)) {
-      if (form.elements[key]) form.elements[key].value = value;
-    }
-  } catch { /* stockage indisponible : formulaire vide */ }
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(PROFILE_KEY) || "{}"); } catch { /* stockage indisponible */ }
+  for (const [key, value] of Object.entries({ ...DEFAULT_PROFILE, ...saved })) {
+    if (form.elements[key]) form.elements[key].value = value;
+  }
 }
 
 form.addEventListener("submit", async (event) => {
