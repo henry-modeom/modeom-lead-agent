@@ -147,3 +147,49 @@ def test_password_protects_app(monkeypatch):
         assert http.get("/api/searches").status_code == 401
         assert http.get("/api/searches", auth=("x", "faux")).status_code == 401
         assert http.get("/api/searches", auth=("modeom", "secret")).status_code == 200
+
+
+TENDER = {
+    "title": "Création de locaux vélos", "buyer": "Bailleur Exemple", "buyer_type": "Bailleur social",
+    "location": "Lyon (69)", "published": "2026-09-20", "deadline": "2026-10-30", "status": "ouvert",
+    "scope": "Fourniture et pose de 3 abris vélos.", "reference": "26-123456",
+    "url": "https://www.boamp.fr/pages/avis/?q=idweb:26-123456", "score": 85,
+    "score_reason": "Produit Modeom, zone prioritaire.", "sources": [],
+}
+
+
+def test_search_boamp_retries_without_sort_and_trims_fields():
+    calls = []
+
+    def boamp(request: httpx.Request) -> httpx.Response:
+        calls.append(dict(request.url.params))
+        if "order_by" in request.url.params:
+            return httpx.Response(400, json={"error": "unknown field"})
+        return httpx.Response(200, json={"results": [
+            {"idweb": "26-1", "objet": "Abris vélos", "descripteur_libelle": ["Abri", "Vélo"], "donnees": "x" * 5000},
+        ]})
+
+    http = httpx.Client(transport=httpx.MockTransport(boamp))
+    results = tools.search_boamp({"query": 'local "vélos"'}, http)
+    assert calls[0]["where"] == 'search("local  vélos ")'
+    assert "order_by" not in calls[1]
+    assert results == [{"idweb": "26-1", "objet": "Abris vélos", "descripteur_libelle": "Abri, Vélo"}]
+
+
+def test_save_tender_dedupes_by_reference_and_exports_csv(monkeypatch):
+    sid = db.create_search({**PROFILE, "kind": "tenders"})
+    http = httpx.Client()
+    tools.run_tool("save_tender", TENDER, sid, http)
+    content, is_error = tools.run_tool("save_tender", {**TENDER, "score": 90, "url": ""}, sid, http)
+    assert not is_error and "mis à jour" in content
+    assert [t["score"] for t in db.list_leads(sid)] == [90]
+    assert tools.client_tools("tenders")[0]["name"] == "search_boamp"
+    with TestClient(main.app) as client:
+        response = client.get(f"/api/searches/{sid}/leads.csv")
+    assert "appels-offres-modeom" in response.headers["content-disposition"]
+    assert "Création de locaux vélos" in response.text and "Date limite" in response.text
+
+
+def test_tender_brief_includes_date_and_keywords():
+    brief = agent.build_brief({**PROFILE, "kind": "tenders", "keywords": "abri vélos"})
+    assert "Date du jour" in brief and "abri vélos" in brief and "save_tender" in brief

@@ -10,6 +10,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 from . import agent, config, db
@@ -47,6 +49,7 @@ async def require_password(request: Request, call_next):
 
 
 class Profile(BaseModel):
+    kind: Literal["leads", "tenders"] = "leads"
     offer: str = Field(min_length=3, description="Ce que Modeom vend")
     target: str = Field(min_length=3, description="Description du client idéal")
     sectors: str = ""
@@ -55,6 +58,7 @@ class Profile(BaseModel):
     decision_makers: str = ""
     signals: str = ""
     exclusions: str = ""
+    keywords: str = ""
     lead_count: int = Field(default=15, ge=1, le=50)
 
 
@@ -102,21 +106,34 @@ CSV_COLUMNS = [
     ("sources", "Sources"),
 ]
 
+TENDER_CSV_COLUMNS = [
+    ("score", "Pertinence"), ("title", "Objet"), ("buyer", "Acheteur"), ("buyer_type", "Type d'acheteur"),
+    ("location", "Lieu"), ("published", "Parution"), ("deadline", "Date limite"), ("status", "Statut"),
+    ("scope", "Périmètre"), ("reference", "Référence"), ("url", "Lien"),
+    ("score_reason", "Justification"), ("sources", "Sources"),
+]
+
 
 @app.get("/api/searches/{search_id}/leads.csv")
 def export_leads(search_id: int) -> StreamingResponse:
+    search = db.get_search(search_id)
+    if search is None:
+        raise HTTPException(404, "Recherche introuvable")
+    is_tenders = search["profile"].get("kind") == "tenders"
+    columns = TENDER_CSV_COLUMNS if is_tenders else CSV_COLUMNS
+    prefix = "appels-offres" if is_tenders else "leads"
     buffer = io.StringIO()
     buffer.write("﻿")  # BOM pour qu'Excel lise correctement les accents
     writer = csv.writer(buffer, delimiter=";")
-    writer.writerow([label for _, label in CSV_COLUMNS])
+    writer.writerow([label for _, label in columns])
     for lead in db.list_leads(search_id):
         writer.writerow([
             " | ".join(lead.get(key) or []) if isinstance(lead.get(key), list) else lead.get(key, "")
-            for key, _ in CSV_COLUMNS
+            for key, _ in columns
         ])
     buffer.seek(0)
     return StreamingResponse(
         iter([buffer.getvalue()]),
         media_type="text/csv; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="leads-modeom-{search_id}.csv"'},
+        headers={"Content-Disposition": f'attachment; filename="{prefix}-modeom-{search_id}.csv"'},
     )

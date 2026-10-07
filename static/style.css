@@ -1,3 +1,5 @@
+[hidden] { display: none !important; }
+
 :root {
   --bg: #f5f6f8;
   --surface: #ffffff;
@@ -131,3 +133,15 @@ summary { cursor: pointer; color: var(--muted); }
   .layout { grid-template-columns: 1fr; padding: 1rem; }
   .lead { grid-template-columns: 1fr; }
 }
+
+.mode-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; margin-bottom: 1rem;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 10px; }
+.mode-switch button { background: transparent; color: var(--muted); padding: .45rem .5rem; }
+.mode-switch button[aria-selected="true"] { background: var(--surface); color: var(--accent); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.deadline { font-weight: 500; }
+.deadline.soon { color: var(--mid); }
+.deadline.closed { color: var(--muted); text-decoration: line-through; }
+.status-pill { display: inline-block; margin-left: .4rem; padding: 0 .5rem; border-radius: 99px; font-size: .75rem; font-weight: 600;
+  background: var(--accent-soft); color: var(--accent); text-decoration: none; }
+.status-pill.ouvert { background: color-mix(in srgb, var(--high) 15%, transparent); color: var(--high); }
+.status-pill.clos { background: var(--bg); color: var(--muted); }

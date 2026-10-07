@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Modeom · Leads</title>
+  <title>Modeom Leads</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
@@ -15,20 +15,26 @@
   <main class="layout">
     <aside class="sidebar">
       <form id="profile-form" class="card">
-        <h2>Profil cible</h2>
+        <div class="mode-switch" role="tablist" aria-label="Type de recherche">
+          <button type="button" role="tab" data-kind="leads" aria-selected="true">Leads</button>
+          <button type="button" role="tab" data-kind="tenders" aria-selected="false">Appels d'offres</button>
+        </div>
+        <input type="hidden" name="kind" value="leads">
+        <h2 id="form-title">Profil cible</h2>
         <label>Ce que Modeom vend *
-          <textarea name="offer" rows="4" required placeholder="Ex. : sites web et identité visuelle pour PME"></textarea>
+          <textarea name="offer" rows="4" required></textarea>
         </label>
-        <label>Client idéal *
-          <textarea name="target" rows="3" required placeholder="Ex. : PME du BTP qui n'ont pas de site moderne"></textarea>
+        <label><span id="target-label">Client idéal</span> *
+          <textarea name="target" rows="3" required></textarea>
         </label>
-        <label>Secteurs<input name="sectors" placeholder="BTP, artisans, architectes…"></label>
-        <label>Zones<input name="locations" placeholder="Lyon et Rhône (69)"></label>
-        <label>Taille<input name="company_sizes" placeholder="10 à 100 salariés"></label>
-        <label>Décideurs<input name="decision_makers" placeholder="Gérant, directeur marketing"></label>
-        <label>Signaux d'achat<input name="signals" placeholder="Recrute, site daté, nouvelle agence…"></label>
-        <label>Exclusions<input name="exclusions" placeholder="Agences concurrentes, grands groupes"></label>
-        <label>Nombre de leads<input name="lead_count" type="number" min="1" max="50" value="15"></label>
+        <label data-mode="leads">Secteurs<input name="sectors"></label>
+        <label>Zones<input name="locations"></label>
+        <label data-mode="tenders">Mots-clés à surveiller<textarea name="keywords" rows="3"></textarea></label>
+        <label data-mode="leads">Taille<input name="company_sizes"></label>
+        <label data-mode="leads">Décideurs<input name="decision_makers"></label>
+        <label data-mode="leads">Signaux d'achat<input name="signals"></label>
+        <label>Exclusions<input name="exclusions"></label>
+        <label><span id="count-label">Nombre de leads</span><input name="lead_count" type="number" min="1" max="50" value="15"></label>
         <button type="submit" id="submit-btn">Lancer la recherche</button>
       </form>
 
@@ -41,7 +47,7 @@
     <section class="content">
       <div id="empty" class="empty card">
         <h2>Aucune recherche sélectionnée</h2>
-        <p>Décrivez votre cible à gauche puis lancez une recherche. Les leads s'affichent ici au fil de l'eau, classés par pertinence.</p>
+        <p>Choisissez « Leads » pour trouver des clients, ou « Appels d'offres » pour recenser les marchés publics, puis lancez la recherche. Les résultats s'affichent ici au fil de l'eau, classés par pertinence.</p>
       </div>
 
       <div id="search-view" hidden>

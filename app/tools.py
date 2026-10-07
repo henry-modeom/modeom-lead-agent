@@ -8,6 +8,7 @@ from . import config, db
 
 COMPANY_API = "https://recherche-entreprises.api.gouv.fr/search"
 PLACES_API = "https://places.googleapis.com/v1/places:searchText"
+BOAMP_API = "https://boamp-datadila.opendatasoft.com/api/explore/v2.1/catalog/datasets/boamp/records"
 
 # Codes INSEE des tranches d'effectif salarié, pour des résultats lisibles.
 EFFECTIFS = {
@@ -124,7 +125,60 @@ SAVE_LEAD = {
 }
 
 
-def client_tools() -> list[dict]:
+SEARCH_BOAMP = {
+    "name": "search_boamp",
+    "description": (
+        "Recherche plein texte dans les avis de marchés publics du BOAMP (open data DILA), du plus "
+        "récent au plus ancien. Renvoie pour chaque avis les champs courts disponibles (identifiant "
+        "idweb, objet, acheteur, dates de parution et de limite de réponse, départements, type...). "
+        "Lien d'un avis : https://www.boamp.fr/pages/avis/?q=idweb:<idweb>."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "query": {"type": "string", "description": "Mots-clés, ex. 'local vélos' ou 'garages préfabriqués'."},
+            "offset": {"type": "integer", "description": "Décalage pour paginer (0, 20, 40...)."},
+        },
+        "required": ["query"],
+    },
+}
+
+SAVE_TENDER = {
+    "name": "save_tender",
+    "description": (
+        "Enregistre un appel d'offres pertinent dans la liste affichée à l'utilisateur. Un appel par "
+        "avis ; rappeler l'outil pour la même référence ou URL met l'avis à jour."
+    ),
+    "strict": True,
+    "input_schema": {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "title": {"type": "string", "description": "Objet du marché."},
+            "buyer": {"type": "string", "description": "Acheteur (maître d'ouvrage)."},
+            "buyer_type": {"type": "string", "description": "Bailleur social, collectivité, État, entreprise, autre."},
+            "location": {"type": "string", "description": "Ville et département."},
+            "published": {"type": "string", "description": "Date de parution AAAA-MM-JJ, ou chaîne vide."},
+            "deadline": {"type": "string", "description": "Date limite de réponse AAAA-MM-JJ, ou chaîne vide."},
+            "status": {"type": "string", "enum": ["ouvert", "clos", "non vérifié"]},
+            "scope": {"type": "string", "description": "Ce qui est demandé, 1-2 phrases."},
+            "reference": {"type": "string", "description": "N° d'avis BOAMP ou référence, ou chaîne vide."},
+            "url": {"type": "string", "description": "Lien vers l'avis."},
+            "score": {"type": "integer", "description": "Pertinence 0-100 (voir la grille)."},
+            "score_reason": {"type": "string", "description": "Pourquoi ce score, 1-2 phrases."},
+            "sources": {"type": "array", "items": {"type": "string"}, "description": "URLs consultées."},
+        },
+        "required": [
+            "title", "buyer", "buyer_type", "location", "published", "deadline", "status",
+            "scope", "reference", "url", "score", "score_reason", "sources",
+        ],
+    },
+}
+
+
+def client_tools(kind: str = "leads") -> list[dict]:
+    if kind == "tenders":
+        return [SEARCH_BOAMP, SEARCH_COMPANIES, SAVE_TENDER]
     tools = [SEARCH_COMPANIES]
     if config.GOOGLE_MAPS_API_KEY:
         tools.append(SEARCH_PLACES)
@@ -190,6 +244,34 @@ def search_google_maps(args: dict, http: httpx.Client) -> list[dict]:
     ]
 
 
+def _short_fields(record: dict) -> dict:
+    """Garde les champs courts d'un avis (les champs volumineux comme le détail JSON sont omis)."""
+    kept = {}
+    for key, value in record.items():
+        if isinstance(value, list):
+            value = ", ".join(str(v) for v in value if isinstance(v, (str, int, float)))
+        if isinstance(value, (str, int, float)) and value != "" and len(str(value)) <= 400:
+            kept[key] = value
+    return kept
+
+
+def search_boamp(args: dict, http: httpx.Client) -> list[dict]:
+    query = args["query"].replace('"', " ")
+    params = {
+        "where": f'search("{query}")',
+        "order_by": "dateparution desc",
+        "limit": 20,
+        "offset": int(args.get("offset") or 0),
+    }
+    response = http.get(BOAMP_API, params=params, timeout=30)
+    if response.status_code == 400:
+        # Champ de tri inconnu selon la version du jeu de données : on retente sans tri.
+        params.pop("order_by")
+        response = http.get(BOAMP_API, params=params, timeout=30)
+    response.raise_for_status()
+    return [_short_fields(r) for r in response.json().get("results", [])]
+
+
 def run_tool(name: str, args: dict, search_id: int, http: httpx.Client) -> tuple[str, bool]:
     """Exécute un outil client. Renvoie (contenu du tool_result, is_error)."""
     try:
@@ -201,6 +283,16 @@ def run_tool(name: str, args: dict, search_id: int, http: httpx.Client) -> tuple
             results = search_google_maps(args, http)
             db.log_event(search_id, f"Google Maps : « {args['query']} » → {len(results)} résultats")
             return json.dumps(results, ensure_ascii=False), False
+        if name == "search_boamp":
+            results = search_boamp(args, http)
+            db.log_event(search_id, f"BOAMP : « {args['query']} » → {len(results)} avis")
+            return json.dumps(results, ensure_ascii=False), False
+        if name == "save_tender":
+            tender = {**args, "kind": "tender", "score": max(0, min(100, int(args["score"])))}
+            is_new = db.save_lead(search_id, tender)
+            verb = "ajouté" if is_new else "mis à jour"
+            db.log_event(search_id, f"Appel d'offres {verb} : {tender['title'][:80]} ({tender['score']}/100)")
+            return f"Avis {verb}. Total : {db.count_leads(search_id)} avis.", False
         if name == "save_lead":
             lead = {**args, "score": max(0, min(100, int(args["score"])))}
             is_new = db.save_lead(search_id, lead)

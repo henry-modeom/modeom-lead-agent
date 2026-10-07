@@ -80,6 +80,12 @@ def log_event(search_id: int, message: str) -> None:
 
 
 def dedupe_key(lead: dict) -> str:
+    if lead.get("kind") == "tender":
+        reference = " ".join((lead.get("reference") or "").lower().split())
+        if reference:
+            return f"ref:{reference}"
+        url = (lead.get("url") or "").lower().rstrip("/")
+        return f"url:{url}" if url else "title:" + " ".join((lead.get("title") or "").lower().split())
     siren = (lead.get("siren") or "").replace(" ", "")
     if siren:
         return f"siren:{siren}"

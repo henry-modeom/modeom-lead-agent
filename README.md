@@ -1,7 +1,13 @@
 # Modeom · Agent de recherche de leads
 
-Agent IA (API Claude) qui trouve des entreprises correspondant à votre profil cible, identifie le
-décideur, repère des signaux d'achat et attribue à chaque lead un score de pertinence sur 100.
+Agent IA (API Claude) avec deux modes :
+
+- **Leads** : trouve des entreprises correspondant à votre profil cible (bailleurs, promoteurs,
+  entreprises de construction, architectes, maîtres d'ouvrage…), identifie le décideur, repère des
+  signaux d'achat et attribue à chaque lead un score de pertinence sur 100.
+- **Appels d'offres** : recense les marchés publics qui correspondent aux produits de Modeom
+  (BOAMP et plateformes de marchés publics), avec acheteur, date limite, statut et score.
+
 Les résultats s'affichent dans une interface web, classés par score, et s'exportent en CSV.
 
 ## Sources utilisées
@@ -10,6 +16,7 @@ Les résultats s'affichent dans une interface web, classés par score, et s'expo
 |---|---|---|
 | Recherche web (outil `web_search` de Claude) | Presse, annuaires sectoriels, offres d'emploi, sites des entreprises | Incluse avec la clé Anthropic |
 | LinkedIn | URLs des profils et pages entreprises trouvées **via la recherche web** (`site:linkedin.com/in …`) | Rien à configurer |
+| BOAMP (API open data de la DILA) | Avis de marchés publics, mode « Appels d'offres » | API publique, sans clé |
 | Annuaire officiel des entreprises (recherche-entreprises.api.gouv.fr) | SIREN, effectif, code NAF, dirigeants | API publique, sans clé |
 | Google Maps (Places API) | Entreprises et commerces locaux, téléphone, avis | `GOOGLE_MAPS_API_KEY` (optionnel) |
 

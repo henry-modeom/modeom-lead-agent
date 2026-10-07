@@ -1,5 +1,7 @@
 """Boucle de l'agent de recherche de leads (API Claude + outils)."""
 
+from datetime import date
+
 import anthropic
 import httpx
 
@@ -44,7 +46,56 @@ fait à l'offre de Modeom.
 un court bilan en français : nombre de leads, angles explorés, pistes à creuser ensuite."""
 
 
+TENDER_PROMPT = """Tu es l'agent de veille marchés publics de Modeom. Ta mission : recenser les \
+appels d'offres et consultations qui correspondent à l'offre de Modeom, puis enregistrer chacun \
+avec l'outil save_tender, avec un score de pertinence justifié.
+
+Méthode :
+1. Interroge le BOAMP avec search_boamp en variant les mots-clés : produits de Modeom, synonymes \
+(« abri vélos », « stationnement vélos », « local ordures ménagères », « abri conteneurs », \
+« garages », « boxes », « construction modulaire », « résidentialisation »...) et lots de marchés \
+plus larges (réhabilitation, VRD, aménagements extérieurs) qui peuvent inclure ces ouvrages.
+2. Complète par la recherche web : plateformes de marchés publics des bailleurs et collectivités, \
+marches-publics.info, achatpublic.com, e-marchespublics.com, marchesonline.com, TED. \
+Si search_boamp échoue, passe entièrement par la recherche web.
+3. Pour chaque avis, vérifie l'objet, l'acheteur, la localisation, la date limite de réponse et si \
+l'avis est encore ouvert à la date du jour. L'annuaire officiel des entreprises peut aider à \
+qualifier l'acheteur.
+4. Enregistre chaque avis pertinent avec save_tender dès qu'il est vérifié.
+
+Grille de scoring (0-100) :
+- Adéquation directe avec les produits de Modeom : jusqu'à 50 points.
+- Zone prioritaire du profil : jusqu'à 20 points.
+- Délai de réponse encore ouvert, avec assez de temps pour répondre : jusqu'à 20 points.
+- Clarté de l'avis (montant, lots, documents accessibles) : jusqu'à 10 points.
+N'enregistre pas les avis sous 30, ni les avis clos depuis plus de 3 mois.
+
+Règles :
+- N'invente jamais un avis, une date, une référence ou une URL. Un champ inconnu reste vide et le \
+statut est « non vérifié ».
+- Un avis = une entrée. Pas de doublons entre BOAMP et les autres plateformes.
+- Quand tu as atteint le nombre d'avis demandé ou épuisé les pistes, termine par un court bilan \
+en français : nombre d'avis, avis à traiter en priorité, mots-clés à surveiller ensuite."""
+
+
 def build_brief(profile: dict) -> str:
+    if profile.get("kind") == "tenders":
+        labels = [
+            ("offer", "Ce que Modeom vend"),
+            ("target", "Acheteurs visés"),
+            ("locations", "Zones géographiques"),
+            ("keywords", "Mots-clés à surveiller"),
+            ("exclusions", "Exclusions"),
+        ]
+        lines = [f"- {label} : {profile[key].strip()}" for key, label in labels if (profile.get(key) or "").strip()]
+        count = int(profile.get("lead_count") or 15)
+        return (
+            f"Date du jour : {date.today().isoformat()}.\n"
+            "Profil de veille pour cette recherche :\n"
+            + "\n".join(lines)
+            + f"\n\nObjectif : recenser jusqu'à {count} appels d'offres pertinents, enregistrés avec save_tender."
+        )
+
     labels = [
         ("offer", "Ce que Modeom vend"),
         ("target", "Client idéal"),
@@ -80,8 +131,11 @@ def run_search(search_id: int, profile: dict, client: anthropic.Anthropic | None
     owns_http = http is None
     http = http or httpx.Client()
     target = int(profile.get("lead_count") or 15)
+    kind = profile.get("kind") or "leads"
+    system = TENDER_PROMPT if kind == "tenders" else SYSTEM_PROMPT
+    noun = "appels d'offres" if kind == "tenders" else "leads"
     messages: list = [{"role": "user", "content": build_brief(profile)}]
-    all_tools = [web_search_tool(), *tools.client_tools()]
+    all_tools = [web_search_tool(), *tools.client_tools(kind)]
     nudged = False
     db.log_event(search_id, "Recherche démarrée")
     try:
@@ -89,7 +143,7 @@ def run_search(search_id: int, profile: dict, client: anthropic.Anthropic | None
             response = client.beta.messages.create(
                 model=config.MODEL,
                 max_tokens=16000,
-                system=SYSTEM_PROMPT,
+                system=system,
                 tools=all_tools,
                 messages=messages,
                 thinking={"type": "adaptive"},
@@ -134,20 +188,20 @@ def run_search(search_id: int, profile: dict, client: anthropic.Anthropic | None
                 messages.append({
                     "role": "user",
                     "content": (
-                        f"Tu as enregistré {found} leads sur les {target} demandés. Explore d'autres "
-                        "angles (autres villes de la zone, secteurs voisins, offres d'emploi, presse "
-                        "locale) avant de conclure, sauf si les pistes sérieuses sont vraiment épuisées."
+                        f"Tu as enregistré {found} {noun} sur les {target} demandés. Explore d'autres "
+                        "angles (autres mots-clés, autres départements de la zone, autres sources) "
+                        "avant de conclure, sauf si les pistes sérieuses sont vraiment épuisées."
                     ),
                 })
                 continue
 
             summary = "\n".join(b.text for b in response.content if b.type == "text").strip()
             db.finish_search(search_id, "done", summary=summary)
-            db.log_event(search_id, f"Recherche terminée : {found} leads")
+            db.log_event(search_id, f"Recherche terminée : {found} {noun}")
             return
 
         found = db.count_leads(search_id)
-        db.finish_search(search_id, "done", summary=f"Limite de {config.MAX_TURNS} tours atteinte ({found} leads).")
+        db.finish_search(search_id, "done", summary=f"Limite de {config.MAX_TURNS} tours atteinte ({found} {noun}).")
         db.log_event(search_id, "Limite de tours atteinte")
     except Exception as exc:  # noqa: BLE001 - toute erreur doit être visible dans l'interface
         db.finish_search(search_id, "error", error=str(exc))
