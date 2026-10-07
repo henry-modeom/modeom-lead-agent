@@ -1,12 +1,14 @@
 """Serveur web : API JSON + interface de consultation des leads."""
 
+import base64
 import csv
 import io
+import secrets
 import threading
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -22,6 +24,26 @@ async def lifespan(_app: FastAPI):
 app = FastAPI(title="Modeom – Agent de recherche de leads", lifespan=lifespan)
 STATIC_DIR = config.ROOT / "static"
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+@app.middleware("http")
+async def require_password(request: Request, call_next):
+    """Protège l'application par mot de passe quand APP_PASSWORD est défini (mise en ligne)."""
+    if config.APP_PASSWORD:
+        header = request.headers.get("authorization", "")
+        password = ""
+        if header.startswith("Basic "):
+            try:
+                password = base64.b64decode(header[6:]).decode().partition(":")[2]
+            except ValueError:
+                pass
+        if not secrets.compare_digest(password.encode(), config.APP_PASSWORD.encode()):
+            return Response(
+                "Mot de passe requis",
+                status_code=401,
+                headers={"WWW-Authenticate": 'Basic realm="Modeom Leads", charset="UTF-8"'},
+            )
+    return await call_next(request)
 
 
 class Profile(BaseModel):

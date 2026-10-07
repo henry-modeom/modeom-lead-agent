@@ -1,0 +1,24 @@
+# Mise en ligne sur Render (https://render.com) : New > Blueprint > choisir ce dépôt.
+services:
+  - type: web
+    name: modeom-leads
+    runtime: python
+    plan: starter
+    region: frankfurt
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: APP_PASSWORD
+        sync: false
+      - key: GOOGLE_MAPS_API_KEY
+        sync: false
+      - key: LEAD_AGENT_DB
+        value: /var/data/leads.db
+    disk:
+      name: leads-data
+      mountPath: /var/data
+      sizeGB: 1

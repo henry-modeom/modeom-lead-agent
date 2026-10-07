@@ -28,6 +28,24 @@ uvicorn app.main:app --reload
 
 Ouvrez ensuite <http://localhost:8000>.
 
+## Mise en ligne (sans rien installer)
+
+L'application peut tourner sur [Render](https://render.com), et s'ouvre alors depuis n'importe quel
+navigateur, téléphone compris.
+
+1. Créez un compte Render et connectez-le à GitHub, avec accès au dépôt `modeom-lead-agent`.
+2. Dans Render : **New → Blueprint**, choisissez ce dépôt. Render lit `render.yaml`.
+3. Renseignez les variables demandées :
+   - `ANTHROPIC_API_KEY` : votre clé Claude ;
+   - `APP_PASSWORD` : le mot de passe de l'interface (obligatoire, sinon n'importe qui pourrait
+     lancer des recherches à vos frais) ;
+   - `GOOGLE_MAPS_API_KEY` : facultatif, laissez vide sinon.
+4. Validez. Après quelques minutes, Render affiche l'adresse du site (`https://modeom-leads-….onrender.com`).
+   À l'ouverture, le navigateur demande un identifiant (n'importe lequel) et le mot de passe.
+
+Le plan « Starter » de Render (environ 7 $/mois) est nécessaire pour le disque qui conserve les leads
+entre deux redémarrages.
+
 ## Utilisation
 
 Le formulaire est pré-rempli avec le profil de Modeom, établi d'après modeom.fr : modules préfabriqués en

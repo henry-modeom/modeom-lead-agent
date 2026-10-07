@@ -11,6 +11,7 @@ from app import agent, config, db, main, tools
 def temp_db(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "DB_PATH", tmp_path / "test.db")
     monkeypatch.setattr(config, "GOOGLE_MAPS_API_KEY", "")
+    monkeypatch.setattr(config, "APP_PASSWORD", "")
     db.init()
 
 
@@ -138,3 +139,11 @@ def test_api_create_search_and_export(monkeypatch):
         csv_text = http.get(f"/api/searches/{sid}/leads.csv").text
         assert "Bâti Rhône" in csv_text and "Recrute 2 chefs de chantier" in csv_text
         assert http.get("/").status_code == 200
+
+
+def test_password_protects_app(monkeypatch):
+    monkeypatch.setattr(config, "APP_PASSWORD", "secret")
+    with TestClient(main.app) as http:
+        assert http.get("/api/searches").status_code == 401
+        assert http.get("/api/searches", auth=("x", "faux")).status_code == 401
+        assert http.get("/api/searches", auth=("modeom", "secret")).status_code == 200
