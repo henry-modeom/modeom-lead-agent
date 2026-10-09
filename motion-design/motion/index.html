@@ -1,0 +1,551 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Une forme, douze états</title>
+<style>
+@font-face{font-family:Geist;src:url(fonts/Geist-Variable.woff2) format("woff2");font-weight:100 900}
+@font-face{font-family:GeistMono;src:url(fonts/GeistMono-Regular.woff2) format("woff2");font-weight:400}
+:root{--bg:#E7E4DF;--ink:#0A0A0A;--paper:#FFFFFF;--mute:#8C8C8C}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg);overflow:hidden}
+body{font-family:Geist,system-ui,sans-serif;-webkit-font-smoothing:antialiased;font-feature-settings:"ss01"}
+#stage{position:relative;width:1440px;height:1440px;background:var(--bg);overflow:hidden}
+#cam{position:absolute;left:720px;top:720px;width:0;height:0;transform-origin:0 0}
+#shape{position:absolute;left:0;top:0;overflow:hidden}
+#origin{position:absolute;width:0;height:0}
+.abs{position:absolute;left:0;top:0;transform-origin:0 0}
+.layer{position:absolute;left:0;top:0;width:0;height:0;transform-origin:0 0}
+.t{position:absolute;left:0;top:0;white-space:nowrap;line-height:1}
+.mono{font-family:GeistMono,monospace;font-variant-numeric:tabular-nums}
+svg{display:block;overflow:visible}
+.ic{fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round}
+#cursor{position:absolute;left:0;top:0;width:44px;height:44px;transform-origin:7.3px 4.6px;filter:drop-shadow(0 2px 2.5px rgba(0,0,0,.22))}
+#hud{position:fixed;left:12px;bottom:10px;font:12px GeistMono,monospace;color:#6b6b6b}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="cam">
+    <div id="shape">
+      <div id="origin">
+
+        <!-- 1 · bouton -->
+        <div class="layer" id="Lbutton">
+          <div class="t" id="btnRow" style="display:flex;align-items:center;gap:10px;color:#fff;font-size:21px;font-weight:520;transform:translate(-50%,-50%)">
+            <span>Commencer</span><span id="icArrow"></span>
+          </div>
+        </div>
+
+        <!-- 2 · loader / 3 · check -->
+        <div class="layer" id="Lloader"><svg id="loaderSvg" class="abs" width="40" height="40" viewBox="0 0 40 40" style="transform-origin:20px 20px">
+          <circle cx="20" cy="20" r="17" fill="none" stroke="rgba(255,255,255,.18)" stroke-width="2.5"/>
+          <circle id="arc" cx="20" cy="20" r="17" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" pathLength="1" transform="rotate(-90 20 20)"/>
+        </svg></div>
+        <div class="layer" id="Lcheck"><svg class="abs" width="34" height="34" viewBox="0 0 24 24" style="transform:translate(-17px,-17px);color:#fff">
+          <path id="checkPath" class="ic" d="M5 12.5l4.5 4.5L19 7.5" pathLength="1" stroke-width="1.6"/>
+        </svg></div>
+
+        <!-- pochette partagée : island → lecteur -->
+        <div class="abs" id="art" style="overflow:hidden">
+          <svg viewBox="0 0 100 100" width="100%" height="100%" preserveAspectRatio="none"><rect width="100" height="100" fill="#F2F0EC"/><circle cx="50" cy="50" r="31" fill="#0A0A0A"/><circle cx="50" cy="50" r="19" fill="none" stroke="#2A2A2A" stroke-width="1.2"/><circle cx="50" cy="50" r="5" fill="#F2F0EC"/></svg>
+        </div>
+
+        <!-- 4 · dynamic island -->
+        <div class="layer" id="Lisland"><div id="wave" class="abs"></div></div>
+
+        <!-- 5–6 · lecteur -->
+        <div class="layer" id="Lplayer">
+          <div class="t" style="transform:translate(-144px,-104px);color:#fff;font-size:21px;font-weight:600;letter-spacing:-.01em">Night Drive</div>
+          <div class="t" style="transform:translate(-144px,-74px);color:var(--mute);font-size:16px;font-weight:450">Paper Planes</div>
+          <div class="abs" id="barBg" style="width:504px;height:6px;border-radius:3px;background:#2E2E2E;transform:translate(-252px,11px)"></div>
+          <div class="abs" id="barFill" style="height:6px;border-radius:3px;background:#fff"></div>
+          <div class="abs" id="thumb" style="background:#fff;border-radius:50%"></div>
+          <div class="t mono" id="tNow" style="color:var(--mute);font-size:13px"></div>
+          <div class="t mono" id="tLeft" style="color:var(--mute);font-size:13px"></div>
+          <div class="abs" id="prev" style="color:#fff"></div>
+          <div class="abs" id="next" style="color:#fff"></div>
+          <div class="abs" id="playBtn" style="width:58px;height:58px;border-radius:50%;background:#fff;transform-origin:29px 29px">
+            <svg width="26" height="26" viewBox="0 0 24 24" style="position:absolute;left:16px;top:16px"><path id="ppPath" fill="#0A0A0A" stroke="#0A0A0A" stroke-width="1.6" stroke-linejoin="round"/></svg>
+          </div>
+        </div>
+
+        <!-- piste des onglets (dans la carte du graphique) -->
+        <div class="abs" id="tabTrack" style="background:#1C1C1C"></div>
+        <div class="layer" id="LtabsGray"></div>
+
+        <!-- l'indicateur : remplissage → knob → indicateur d'onglets -->
+        <div class="abs" id="ind" style="overflow:hidden">
+          <div class="abs" id="spk" style="color:#fff"></div>
+          <div class="layer" id="LtabsInk"></div>
+        </div>
+
+        <!-- 10 · graphique -->
+        <div class="layer" id="Lchart">
+          <div class="t" style="transform:translate(-260px,-110px);color:var(--mute);font-size:15px;font-weight:450">Revenus · cette semaine</div>
+          <div class="t" style="transform:translate(-260px,-84px);display:flex;align-items:center;gap:12px">
+            <span style="color:#fff;font-size:44px;font-weight:600;letter-spacing:-.025em">48 290 €</span>
+            <span class="mono" style="color:#fff;font-size:13px;background:#1F1F1F;border-radius:999px;padding:6px 10px">+12,4 %</span>
+          </div>
+          <svg class="abs" id="chartSvg" width="1" height="1"></svg>
+          <div class="abs" id="tip" style="width:150px;height:48px;border-radius:12px;background:#fff">
+            <div class="layer" id="tipA"></div><div class="layer" id="tipB"></div>
+          </div>
+        </div>
+
+        <!-- 11 · ⌘K -->
+        <div class="layer" id="Lsearch">
+          <div class="abs" id="searchIc" style="color:#0A0A0A"></div>
+          <div class="t" id="query" style="font-size:20px;font-weight:450;display:flex;align-items:center"></div>
+          <div class="t mono" id="kbd" style="font-size:14px;color:#555;background:#F0EEEA;border-radius:8px;padding:7px 9px"></div>
+        </div>
+        <div class="abs" id="divider" style="height:1px;width:520px;background:#ECEAE6"></div>
+        <div class="abs" id="hl" style="width:504px;height:46px;border-radius:12px"></div>
+        <div class="layer" id="Llist"></div>
+
+        <!-- 12 · toast -->
+        <div class="layer" id="Ltoast">
+          <div class="abs" id="toastIc" style="color:#fff;transform:translate(-174px,-11px)"></div>
+          <div class="t" style="transform:translate(-142px,-50%);color:#fff;font-size:18px;font-weight:520">Rapport exporté</div>
+          <div class="t" style="transform:translate(176px,-50%) translateX(-100%);color:var(--mute);font-size:16px;font-weight:450">Annuler</div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+  <svg id="cursor" viewBox="0 0 24 24"><path d="M4 2.5V19.6l4.7-4.3 3 6.5 2.9-1.3-3-6.4h6.3z" fill="#0A0A0A" stroke="#fff" stroke-width="1.3" stroke-linejoin="round"/></svg>
+</div>
+
+<script>
+// ───────────────────────── tempo ─────────────────────────
+const BPM = 120, BEAT = 60 / BPM, BARS = 7, T = BARS * 4 * BEAT;   // 14 s
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, k) => a + (b - a) * k;
+
+// ───────────────── springs (forme fermée) ─────────────────
+// P : pulsation propre w (rad/s) et amortissement z. z < 1 → léger dépassement.
+const P = {
+  shape: { w: 16, z: 0.82 },   // ~1 % de dépassement
+  fast:  { w: 26, z: 0.9 },
+  lead:  { w: 27, z: 0.84 },   // bord avant de l'indicateur
+  trail: { w: 12, z: 0.92 },   // bord arrière
+  cam:   { w: 7.5, z: 1 },
+  cx:    { w: 12, z: 1 },
+  cy:    { w: 10.5, z: 1 },
+  enter: { w: 24, z: 1 },
+  color: { w: 18, z: 1 },
+  draw:  { w: 9.5, z: 1 },
+  back:  { w: 15, z: 0.8 },    // retour élastique après un drag
+};
+// réponse d'un ressort partant de (x0, v0) vers x1, tau secondes après le départ
+function spr(x0, v0, x1, p, tau) {
+  const { w, z } = p, A = x0 - x1;
+  if (z >= 1) return x1 + Math.exp(-w * tau) * (A + (v0 + w * A) * tau);
+  const wd = w * Math.sqrt(1 - z * z), B = (v0 + z * w * A) / wd;
+  return x1 + Math.exp(-z * w * tau) * (A * Math.cos(wd * tau) + B * Math.sin(wd * tau));
+}
+const step = (p, tau) => (tau <= 0 ? 0 : spr(1, 0, 0, p, tau) * -1 + 1); // 0 → 1
+
+// Valeur qui change de cible plusieurs fois = somme d'un ressort par changement.
+// Le terme t+T reprend la queue de la boucle précédente : la piste est exactement périodique.
+function track(v0, events, p0 = P.shape) {
+  let prev = v0;
+  const d = events.map(([t, v, p]) => { const e = { t, d: v - prev, p: p || p0 }; prev = v; return e; });
+  if (Math.abs(prev - v0) > 1e-9) throw new Error('piste non périodique ' + v0 + ' → ' + prev);
+  return t => {
+    let s = v0;
+    for (const e of d) if (e.d) s += e.d * (step(e.p, t - e.t) + step(e.p, t - e.t + T) - 1);
+    return s;
+  };
+}
+// Chaîne : segments direct (f) ou ressort (to, p) qui part de la position/vitesse
+// exactes du segment précédent. Les états aux bornes sont des constantes calculées une fois.
+function chain(f0, segs) {
+  const S = [{ t: -Infinity, f: f0 }, ...segs];
+  const ev = (i, t) => { const s = S[i]; return s.f ? s.f(t) : spr(s.x0, s.v0, s.to, s.p, t - s.t); };
+  for (let i = 1; i < S.length; i++) {
+    if (S[i].f) continue;
+    const h = 1e-4, t = S[i].t;
+    S[i].x0 = ev(i - 1, t); S[i].v0 = (ev(i - 1, t) - ev(i - 1, t - h)) / h;
+  }
+  return t => { let i = S.length - 1; while (i > 0 && t < S[i].t) i--; return ev(i, t); };
+}
+// Visibilité d'un contenu : entrée par ressort à tin, sortie courte à tout (s'enchaînent sans se chevaucher)
+function vis(t, tin, tout) {
+  let best = { o: 0, p: 0, e: 1 };
+  for (const tt of [t, t + T, t - T]) {
+    const p = step(P.enter, tt - tin), k = clamp((tt - tout) / 0.12), e = k * k * (3 - 2 * k);
+    const o = p * (1 - e);
+    if (o > best.o) best = { o, p, e };
+  }
+  return best;
+}
+const pressT = (ivs, p = P.fast) => track(0, ivs.flatMap(([a, b]) => [[a, 1, p], [b, 0, p]]));
+
+// ───────────────────────── icônes (trait 2 px UI partout) ─────────────────────────
+const ICONS = {
+  arrow: '<path d="M5 12h14M13 6l6 6-6 6"/>',
+  search: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>',
+  fileDown: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M12 11v6M9.5 14.5 12 17l2.5-2.5"/>',
+  send: '<path d="M21 3 10 14M21 3l-6.5 18-4-7.5L3 9.5z"/>',
+  plus: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M12 11v6M9 14h6"/>',
+  table: '<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M3.5 10h17M3.5 15h17M10 10v9.5"/>',
+  checkCircle: '<circle cx="12" cy="12" r="9"/><path d="M8 12.3l2.7 2.7L16 9.6"/>',
+  speaker: '<path d="M11 5 6.5 9H3.5v6h3L11 19z"/><path class="w1" d="M15.5 9a4.5 4.5 0 0 1 0 6"/><path class="w2" d="M18.5 6a8.5 8.5 0 0 1 0 12"/>',
+};
+const icon = (name, size) =>
+  `<svg class="ic" width="${size}" height="${size}" viewBox="0 0 24 24" stroke-width="${(2 * 24 / size).toFixed(3)}">${ICONS[name]}</svg>`;
+const glyphNext = s => `<svg width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M5 6.6v10.8a1 1 0 0 0 1.5.86l8.6-5.4a1 1 0 0 0 0-1.72L6.5 5.74A1 1 0 0 0 5 6.6z" fill="currentColor"/><rect x="17" y="5.5" width="2.4" height="13" rx="1.2" fill="currentColor"/></svg>`;
+
+// ───────────────────────── partition ─────────────────────────
+// temps n (1…28) → secondes
+const b = n => (n - 1) * BEAT;
+const ST = {   // géométrie de la forme pour chaque état [w, h, r, couleur 0 noir → 1 blanc, zoom caméra]
+  button: [280, 72, 36, 0, 2.3], loader: [72, 72, 36, 0, 3.0], island: [360, 56, 28, 0, 2.0],
+  player: [560, 272, 40, 0, 1.62], slider: [520, 88, 44, 1, 1.72], toggle: [160, 88, 44, 1, 2.5],
+  tabs: [520, 72, 36, 0, 1.75], chart: [572, 470, 32, 0, 1.55], search: [520, 68, 34, 1, 1.85],
+  pal4: [520, 293, 24, 1, 1.7], pal2: [520, 189, 24, 1, 1.78], toast: [400, 64, 32, 0, 2.1],
+};
+const SEQ = [ // [temps, état]
+  [b(2), 'loader'], [b(6), 'island'], [b(7), 'player'], [b(12), 'slider'], [b(16), 'toggle'],
+  [b(18), 'tabs'], [b(21), 'chart'], [b(24), 'search'], [b(25), 'pal4'], [b(26), 'pal2'],
+  [b(27), 'toast'], [b(28), 'button'],
+];
+const geo = (k, pr = P.shape) => track(ST.button[k], SEQ.map(([t, s]) => [t, ST[s][k], pr]));
+const shapeW = geo(0), shapeH = geo(1), shapeR = geo(2), cam = geo(4, P.cam);
+const shapeC = track(0, [[b(12), 1, P.color], [b(17), 0, P.color], [b(24), 1, P.color], [b(27), 0, P.color]]);
+
+// clics de la forme entière (bouton, island, toggle) et de leurs enfants
+const shapePress = pressT([[b(2) - 0.1, b(2)], [b(7) - 0.1, b(7)], [b(17) - 0.1, b(17)]]);
+const playPress = pressT([[b(8) - 0.1, b(8)]]);
+
+// ───────────────────────── curseur ─────────────────────────
+const CUR = [ // [départ du geste, x, y] en coordonnées UI (centre de la forme = 0,0)
+  [0.62, 96, 46], [2.30, 118, 8], [3.08, 4, 90], [3.56, -110, 15],
+  [4.00, 176, 17], [4.50, 44, 19],                 // scrub
+  [5.06, -30, 6], [6.00, 300, 10], [6.50, 372, 15], // volume, au-delà du max
+  [7.08, 22, 12], [8.08, -166, 10], [9.04, 4, 10],  // toggle, onglets
+  [10.02, 8, 66], [10.58, 172, 24],                 // survol du graphique
+  [11.30, 250, 150], [12.20, 300, 196], [13.62, 70, 14],
+];
+const curX = track(70, CUR.map(([t, x]) => [t, x, P.cx]));
+const curY = track(14, CUR.map(([t, , y]) => [t, y, P.cy]));
+const HOLD = { scrub: [b(9) - 0.07, b(11)], vol: [b(13) - 0.08, b(15)] };
+const curPress = pressT([[b(2) - 0.1, b(2)], [b(7) - 0.1, b(7)], [b(8) - 0.1, b(8)], HOLD.scrub, HOLD.vol,
+  [b(17) - 0.1, b(17)], [b(19) - 0.1, b(19)], [b(20) - 0.1, b(20)]]);
+
+// ───────────────────────── lecteur : scrub en manipulation directe ─────────────────────────
+const SONG = 198, P0 = 0.28, BAR = 504;
+function prog(t) {
+  const [g, r] = HOLD.scrub;
+  if (t < b(8)) return P0;
+  if (t < g) return P0 + (t - b(8)) / SONG;
+  const pg = P0 + (g - b(8)) / SONG;
+  if (t < r) return clamp(pg + (curX(t) - curX(g)) / BAR);
+  return clamp(pg + (curX(r) - curX(g)) / BAR) + (t - r) / SONG;
+}
+const thumbR = track(6, [[HOLD.scrub[0], 10, P.fast], [HOLD.scrub[1], 6, P.back]]);
+const fmt = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
+// ───────────────────────── volume : étirement au-delà du max ─────────────────────────
+const V0 = 0.35, VSPAN = 520 - 88;
+function volRaw(t) {
+  const [g, r] = HOLD.vol;
+  const tt = Math.min(Math.max(t, g), r);
+  return t < g ? V0 : V0 + (curX(tt) - curX(g)) / VSPAN;
+}
+const vol = t => clamp(volRaw(t));
+const stretchHeld = t => { const over = Math.max(0, volRaw(t) - 1) * VSPAN; return 92 * (1 - Math.exp(-over / 170)); };
+// tenu : calculé depuis le curseur ; relâché : ressort depuis là où il était, vitesse comprise
+const stretch = chain(t => (t < HOLD.vol[0] ? 0 : stretchHeld(t)), [{ t: HOLD.vol[1], to: 0, p: P.back }]);
+
+// ───────────────────────── l'indicateur ─────────────────────────
+// Pendant le slider il est accroché à la forme (direct). Ensuite chaque bord a son propre ressort :
+// le bord avant (lead) part vite, le bord arrière (trail) suit → il s'étire.
+const SEG = 508 / 3, TAB = i => [-254 + i * SEG, -254 + (i + 1) * SEG];
+const sliderL = t => stretch(t) / 2 - (shapeW(t) + stretch(t)) / 2 + 8;
+const sliderR = t => sliderL(t) + 72 + vol(t) * (shapeW(t) + stretch(t) - 88);
+const indL = chain(sliderL, [
+  { t: b(16), to: -72, p: P.shape }, { t: b(17), to: 8, p: P.trail },
+  { t: b(18), to: TAB(2)[0], p: P.trail }, { t: b(19), to: TAB(0)[0], p: P.lead }, { t: b(20), to: TAB(1)[0], p: P.trail },
+]);
+const indR = chain(sliderR, [
+  { t: b(16), to: 0, p: P.shape }, { t: b(17) - 0.1, to: 14, p: P.fast }, { t: b(17), to: 72, p: P.lead },
+  { t: b(18), to: TAB(2)[1], p: P.lead }, { t: b(19), to: TAB(0)[1], p: P.trail }, { t: b(20), to: TAB(1)[1], p: P.lead },
+]);
+const indH = chain(t => shapeH(t) - stretch(t) * 0.14 - 16, [{ t: b(16), to: 72 }, { t: b(18), to: 60 }].map(s => ({ ...s, p: P.shape })));
+const ROWY = -173;                                     // rangée d'onglets dans la carte
+const rowY = track(0, [[b(21), ROWY], [b(25), 0]]);
+const indC = track(0, [[b(17), 1, P.color], [b(25), 0, P.color]]);
+
+// ───────────────────────── graphique ─────────────────────────
+const DATA = [0.30, 0.45, 0.38, 0.64, 0.52, 0.885, 0.72];
+const DAYS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+const PTS = DATA.map((n, i) => [-248 + i * (496 / 6), 165 - n * 170]);
+const tipX = track(PTS[3][0], [[b(23), PTS[5][0]], [b(25), PTS[3][0]]]);
+const tipY = track(PTS[3][1], [[b(23), PTS[5][1]], [b(25), PTS[3][1]]]);
+function smooth(pts) {
+  let d = `M${pts[0][0]} ${pts[0][1]}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2;
+    d += ` C${p1[0] + (p2[0] - p0[0]) / 6} ${p1[1] + (p2[1] - p0[1]) / 6} ${p2[0] - (p3[0] - p1[0]) / 6} ${p2[1] - (p3[1] - p1[1]) / 6} ${p2[0]} ${p2[1]}`;
+  }
+  return d;
+}
+
+// ───────────────────────── palette ─────────────────────────
+const ITEMS = [['Exporter le rapport', 'fileDown'], ['Envoyer une relance', 'send'], ['Nouvelle facture', 'plus'], ['Exporter en CSV', 'table']];
+const KEYS = [[b(25), 'e'], [b(26), 'x'], [b(26) + BEAT / 4, 'p']];
+const query = t => KEYS.filter(([k]) => t >= k).map(([, c]) => c).join('');
+const slot3 = track(3, [[b(26), 1], [b(28), 3]]);
+const hlPress = pressT([[b(27) - 0.07, b(27)]]);
+
+// ───────────────────────── DOM ─────────────────────────
+const $ = id => document.getElementById(id);
+const E = {};
+['cam', 'shape', 'origin', 'Lbutton', 'Lloader', 'arc', 'Lcheck', 'checkPath', 'art', 'Lisland', 'wave', 'Lplayer', 'barFill', 'thumb',
+ 'tNow', 'tLeft', 'playBtn', 'ppPath', 'tabTrack', 'LtabsGray', 'LtabsInk', 'ind', 'spk', 'Lchart', 'chartSvg', 'tip', 'tipA', 'tipB',
+ 'Lsearch', 'searchIc', 'query', 'kbd', 'divider', 'hl', 'Llist', 'Ltoast', 'cursor'].forEach(k => (E[k] = $(k)));
+
+$('icArrow').innerHTML = icon('arrow', 20);
+E.searchIc.innerHTML = icon('search', 22);
+$('toastIc').innerHTML = icon('checkCircle', 22);
+E.spk.innerHTML = icon('speaker', 24);
+E.kbd.textContent = '⌘K';
+$('next').innerHTML = glyphNext(26);
+$('prev').innerHTML = glyphNext(26);
+$('next').style.transform = 'translate(59px,73px)';
+$('prev').style.transform = 'translate(-59px,73px) scaleX(-1)';
+E.wave.innerHTML = [0, 1, 2, 3, 4].map(i => `<div class="abs" style="width:3px;border-radius:2px;background:#fff;left:${i * 6}px"></div>`).join('');
+const WAVE = [...E.wave.children];
+
+const tabHTML = color => ['Jour', 'Semaine', 'Mois'].map((s, i) =>
+  `<div class="t" style="color:${color};font-size:19px;font-weight:520;transform:translate(${(TAB(i)[0] + TAB(i)[1]) / 2}px,0) translate(-50%,-50%)">${s}</div>`).join('');
+E.LtabsGray.innerHTML = tabHTML('#8C8C8C');
+E.LtabsInk.innerHTML = tabHTML('#0A0A0A');
+
+E.chartSvg.innerHTML =
+  [-5, 80, 165].map(y => `<line x1="-260" x2="260" y1="${y}" y2="${y}" stroke="#262626" stroke-width="1" stroke-dasharray="3 5"/>`).join('') +
+  `<line id="guide" y2="165" stroke="#3A3A3A" stroke-width="1.5" stroke-dasharray="3 4"/>` +
+  `<path id="line" d="${smooth(PTS)}" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" pathLength="1"/>` +
+  PTS.map((p, i) => `<circle class="dot" cx="${p[0]}" cy="${p[1]}" r="5" fill="#0A0A0A" stroke="#fff" stroke-width="2"/>`).join('') +
+  DAYS.map((d, i) => `<text x="${PTS[i][0]}" y="203" text-anchor="middle" fill="#6F6F6F" font-family="GeistMono" font-size="13">${d}</text>`).join('');
+const LINE = $('line'), GUIDE = $('guide'), DOTS = [...E.chartSvg.querySelectorAll('.dot')];
+const tipHTML = (d, v) => `<div class="t" style="transform:translate(75px,24px) translate(-50%,-50%);display:flex;gap:8px;align-items:baseline">
+  <span style="color:#8C8C8C;font-size:14px;font-weight:450">${d}</span><span style="color:#0A0A0A;font-size:17px;font-weight:600;letter-spacing:-.01em">${v}</span></div>`;
+E.tipA.innerHTML = tipHTML('Jeu', '7 840 €');
+E.tipB.innerHTML = tipHTML('Sam', '9 310 €');
+
+E.Llist.innerHTML = ITEMS.map(([l, ic]) => `<div class="layer item">
+  <div class="abs" style="color:#5E5E5E;transform:translate(-230px,-11px)">${icon(ic, 22)}</div>
+  <div class="t lbl" style="transform:translate(-198px,-50%);font-size:18px"></div>
+  <div class="t mono ret" style="transform:translate(236px,-50%) translateX(-100%);font-size:14px;color:#555;background:#fff;border-radius:7px;padding:5px 8px">↵</div></div>`).join('');
+const ITEM = [...E.Llist.children].map(el => ({ el, lbl: el.querySelector('.lbl'), ret: el.querySelector('.ret') }));
+const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+function markMatch(label, q) {
+  const i = q ? label.toLowerCase().indexOf(q) : -1;
+  if (i < 0) return `<span style="color:#6B6B6B;font-weight:450">${esc(label)}</span>`;
+  return `<span style="color:#6B6B6B;font-weight:450">${esc(label.slice(0, i))}</span><span style="color:#0A0A0A;font-weight:620">${esc(label.slice(i, i + q.length))}</span><span style="color:#6B6B6B;font-weight:450">${esc(label.slice(i + q.length))}</span>`;
+}
+
+// ───────────────────────── seek(t) ─────────────────────────
+const px = n => `${n.toFixed(3)}px`;
+const gray = k => { const v = Math.round(lerp(10, 255, clamp(k))); return `rgb(${v},${v},${v})`; };
+function setLayer(el, t, tin, tout, o = {}) {
+  const v = vis(t, tin, tout);
+  if (v.o < 0.003) { el.style.display = 'none'; return 0; }
+  const k = (1 - v.p) + v.e, bl = (o.blur ?? 4) * k;
+  el.style.display = '';
+  el.style.opacity = v.o.toFixed(4);
+  el.style.filter = bl > 0.04 ? `blur(${bl.toFixed(2)}px)` : 'none';
+  el.style.transform = `translate(${px(o.x || 0)},${px((o.y || 0) + (o.dy ?? 3) * ((1 - v.p) - v.e))}) scale(${(1 - (o.s ?? 0.035) * k).toFixed(4)})`;
+  return v.o;
+}
+const rrect = (el, x, y, w, h, r) => {
+  el.style.width = px(w); el.style.height = px(h); el.style.borderRadius = px(Math.min(r, w / 2, h / 2));
+  el.style.transform = `translate(${px(x)},${px(y)})`;
+};
+let lastQ = null;
+
+function seek(t) {
+  t = ((t % T) + T) % T;
+
+  // ── caméra et forme
+  const z = cam(t), st = stretch(t);
+  const w = shapeW(t) + st, h = shapeH(t) - st * 0.14, r = shapeR(t), cx = st / 2;
+  E.cam.style.transform = `translate(${px(-cx * 0.45 * z)},0) scale(${z.toFixed(5)})`;
+  const sp = 1 - 0.035 * shapePress(t);
+  E.shape.style.width = px(w); E.shape.style.height = px(h);
+  E.shape.style.borderRadius = px(Math.min(r, w / 2, h / 2));
+  E.shape.style.transformOrigin = `${px(w / 2)} ${px(h / 2)}`;
+  E.shape.style.transform = `translate(${px(cx - w / 2)},${px(-h / 2)}) scale(${sp.toFixed(4)})`;
+  const c = shapeC(t);
+  E.shape.style.background = gray(c);
+  E.shape.style.boxShadow = `0 1px 2px rgba(0,0,0,${(0.05 + 0.05 * c).toFixed(3)}), 0 10px 30px rgba(40,30,20,${(0.07 + 0.05 * c).toFixed(3)})`;
+  E.origin.style.left = px(w / 2); E.origin.style.top = px(h / 2);
+  const ox = -cx;                                   // UI → coordonnées de l'origine (centre de la forme)
+
+  // ── 1 · bouton
+  setLayer(E.Lbutton, t, b(28) + 0.08, b(2) + T);
+
+  // ── 2 · loader → 3 · check
+  if (setLayer(E.Lloader, t, b(2) + 0.08, b(5), { s: 0.25 })) {
+    const pr = track(0, [[b(2), 0.3], [b(3), 0.64], [b(4), 1], [b(9), 0]])(t);
+    E.arc.setAttribute('stroke-dasharray', `${clamp(pr, 0.02, 1).toFixed(4)} 1`);
+    $('loaderSvg').style.transform = `translate(-20px,-20px) rotate(${((t - b(2)) * 330).toFixed(2)}deg)`;
+  }
+  if (setLayer(E.Lcheck, t, b(5) + 0.02, b(6), { s: 0.3, blur: 3 })) {
+    E.checkPath.setAttribute('stroke-dasharray', `${clamp(step(P.fast, t - b(5) - 0.04)).toFixed(4)} 1`);
+  }
+
+  // ── pochette partagée island → lecteur
+  const artO = vis(t, b(6) + 0.1, b(12)).o;
+  if (artO > 0.003) {
+    const a = track(0, [[b(7), 1], [b(13), 0]])(t);
+    const s = lerp(32, 88, a), ax = lerp(-150, -208, a), ay = lerp(0, -64, a);
+    E.art.style.display = ''; E.art.style.opacity = artO;
+    rrect(E.art, ax - s / 2, ay - s / 2, s, s, lerp(9, 16, a));
+  } else E.art.style.display = 'none';
+
+  // ── 4 · island
+  if (setLayer(E.Lisland, t, b(6) + 0.1, b(7))) {
+    WAVE.forEach((el, i) => {
+      const hh = 6 + 12 * Math.abs(Math.sin(t * 6.2 + i * 1.7) * Math.cos(t * 2.3 + i));
+      el.style.height = px(hh); el.style.top = px(-hh / 2);
+    });
+    E.wave.style.transform = 'translate(124px,0)';
+  }
+
+  // ── 5 · lecteur, play/pause, scrub
+  if (setLayer(E.Lplayer, t, b(7) + 0.08, b(12))) {
+    const p = prog(t), tr = thumbR(t);
+    E.barFill.style.width = px(BAR * p);
+    E.barFill.style.transform = 'translate(-252px,11px)';
+    rrect(E.thumb, -252 + BAR * p - tr, 14 - tr, tr * 2, tr * 2, tr);
+    E.tNow.textContent = fmt(p * SONG); E.tLeft.textContent = '-' + fmt(SONG - p * SONG);
+    E.tNow.style.transform = 'translate(-252px,38px) translateY(-50%)';
+    E.tLeft.style.transform = 'translate(252px,38px) translate(-100%,-50%)';
+    E.playBtn.style.transform = `translate(-29px,57px) scale(${(1 - 0.08 * playPress(t)).toFixed(4)})`;
+    const m = t < b(8) ? 0 : step(P.fast, t - b(8));
+    const PLAY = [[7.5, 5], [13, 8.4], [13, 15.6], [7.5, 19], [13, 8.4], [19.5, 12], [19.5, 12], [13, 15.6]];
+    const PAUSE = [[6.5, 5], [10, 5], [10, 19], [6.5, 19], [14, 5], [17.5, 5], [17.5, 19], [14, 19]];
+    const q = PLAY.map((pt, i) => [lerp(pt[0], PAUSE[i][0], m), lerp(pt[1], PAUSE[i][1], m)]);
+    const quad = a => `M${a.map(v => v.map(n => n.toFixed(3)).join(' ')).join('L')}Z`;
+    E.ppPath.setAttribute('d', quad(q.slice(0, 4)) + quad(q.slice(4)));
+  }
+
+  // ── l'indicateur (remplissage → knob → onglet)
+  const indO = vis(t, b(12) + 0.06, b(24)).o;
+  if (indO > 0.003) {
+    const L = indL(t), R = Math.max(indR(t), L + 8), ih = indH(t), cy = rowY(t);
+    E.ind.style.display = ''; E.ind.style.opacity = indO;
+    E.ind.style.background = gray(indC(t));
+    rrect(E.ind, L + ox, cy - ih / 2, R - L, ih, ih / 2);
+    // icône volume dans le remplissage
+    if (setLayer(E.spk, t, b(12) + 0.1, b(16), { x: 24, y: ih / 2 - 12 })) {
+      const v = vol(t);
+      E.spk.querySelector('.w1').style.opacity = clamp((v - 0.15) * 5);
+      E.spk.querySelector('.w2').style.opacity = clamp((v - 0.6) * 5);
+    }
+    // libellés encrés, découpés par l'indicateur : la couleur bascule exactement sur son bord
+    if (setLayer(E.LtabsInk, t, b(18) + 0.1, b(24), { x: -L, y: ih / 2 })) E.LtabsInk.style.left = '0';
+  } else E.ind.style.display = 'none';
+  setLayer(E.LtabsGray, t, b(18) + 0.1, b(24), { x: ox, y: rowY(t) });
+  const trO = vis(t, b(21) + 0.06, b(24)).o;
+  if (trO > 0.003) {
+    E.tabTrack.style.display = ''; E.tabTrack.style.opacity = trO;
+    rrect(E.tabTrack, -260, rowY(t) - 36, 520, 72, 36);
+  } else E.tabTrack.style.display = 'none';
+
+  // ── 10 · graphique
+  if (setLayer(E.Lchart, t, b(21) + 0.1, b(24))) {
+    const d = step(P.draw, t - b(21) - 0.05);
+    LINE.setAttribute('stroke-dasharray', `${clamp(d, 0.001, 1).toFixed(4)} 2`);
+    const hv = [vis(t, b(22), b(23)).o, vis(t, b(23), b(24)).o];
+    DOTS.forEach((el, i) => {
+      const k = clamp((d - i / 6) * 10 + 0.4);
+      const hl = i === 3 ? hv[0] : i === 5 ? hv[1] : 0;
+      el.setAttribute('r', ((4.5 + 2.5 * hl) * k).toFixed(3));
+      el.setAttribute('fill', gray(hl));
+      el.style.opacity = k;
+    });
+    const tx = tipX(t), ty = tipY(t), to = Math.max(...hv);
+    GUIDE.setAttribute('x1', tx); GUIDE.setAttribute('x2', tx); GUIDE.setAttribute('y1', ty + 9);
+    GUIDE.style.opacity = to;
+    const tv = vis(t, b(22), b(24));
+    E.tip.style.display = tv.o > 0.003 ? '' : 'none';
+    E.tip.style.opacity = tv.o;
+    E.tip.style.boxShadow = '0 6px 18px rgba(0,0,0,.25)';
+    E.tip.style.transform = `translate(${px(tx - 75)},${px(ty - 70 + 6 * (1 - tv.p))}) scale(${(0.94 + 0.06 * tv.p).toFixed(4)})`;
+    setLayer(E.tipA, t, b(22) + 0.04, b(23), { blur: 3 });
+    setLayer(E.tipB, t, b(23) + 0.06, b(24), { blur: 3 });
+  }
+
+  // ── 11 · ⌘K : la rangée de recherche colle au bord haut de la forme
+  const top = -h / 2, rowC = top + 34;
+  if (setLayer(E.Lsearch, t, b(24) + 0.08, b(27))) {
+    E.searchIc.style.transform = `translate(-230px,${px(rowC - 11)})`;
+    const q = query(t);
+    if (q !== lastQ) {
+      lastQ = q;
+      E.query.innerHTML = q ? `<span style="color:#0A0A0A">${q}</span><span class="caret" style="display:inline-block;width:2px;height:24px;background:#0A0A0A;margin-left:2px;border-radius:1px"></span>`
+        : `<span class="caret" style="display:inline-block;width:2px;height:24px;background:#0A0A0A;margin-right:3px;border-radius:1px"></span><span style="color:#A3A09B">Rechercher une commande…</span>`;
+    }
+    const lastKey = KEYS.filter(([k]) => t >= k).map(([k]) => k).pop() ?? b(24);
+    E.query.querySelector('.caret').style.opacity = ((t - lastKey) % 1) < 0.55 ? 1 : 0;
+    E.query.style.transform = `translate(-198px,${px(rowC)}) translateY(-50%)`;
+    E.kbd.style.transform = `translate(236px,${px(rowC)}) translate(-100%,-50%)`;
+  }
+  const dvO = vis(t, b(25), b(27)).o;
+  E.divider.style.display = dvO > 0.003 ? '' : 'none';
+  E.divider.style.opacity = dvO;
+  E.divider.style.transform = `translate(-260px,${px(top + 68)})`;
+  const slotY = k => top + 68 + 8 + 26 + k * 52;
+  const hlO = vis(t, b(25) + 0.05, b(27) + 0.02).o;
+  E.hl.style.display = hlO > 0.003 ? '' : 'none';
+  E.hl.style.opacity = hlO;
+  E.hl.style.background = `rgb(${Math.round(lerp(242, 228, hlPress(t)))},${Math.round(lerp(240, 225, hlPress(t)))},${Math.round(lerp(236, 220, hlPress(t)))})`;
+  E.hl.style.transform = `translate(-252px,${px(slotY(0) - 23)})`;
+  if (vis(t, b(25), b(27)).o > 0.003) {
+    E.Llist.style.display = '';
+    const q = query(t);
+    ITEM.forEach((it, i) => {
+      const out = i === 1 || i === 2 ? b(26) : b(27);
+      const y = slotY(i === 3 ? slot3(t) : i);
+      setLayer(it.el, t, b(25) + 0.05 + i * 0.03, out, { y, dy: 6 });
+      it.lbl.innerHTML = markMatch(ITEMS[i][0], q);
+      it.ret.style.opacity = i === 0 ? 1 : 0;
+    });
+  } else E.Llist.style.display = 'none';
+
+  // ── 12 · toast
+  setLayer(E.Ltoast, t, b(27) + 0.08, b(28));
+
+  // ── curseur (espace écran, taille constante)
+  const ux = curX(t), uy = curY(t), cp = curPress(t);
+  const sx = 720 + (ux - cx * 0.45) * z, sy = 720 + uy * z;
+  E.cursor.style.transform = `translate(${px(sx - 7.3)},${px(sy - 4.6)}) scale(${(1 - 0.12 * cp).toFixed(4)})`;
+}
+
+window.T = T; window.seek = seek; window.BEAT = BEAT;
+window.ready = document.fonts.ready.then(() => document.fonts.load('20px Geist')).then(() => document.fonts.load('13px GeistMono'));
+
+// aperçu interactif (absent du rendu) : espace = pause, ←/→ = un temps
+if (!/render/.test(location.search)) {
+  const hud = document.createElement('div'); hud.id = 'hud'; document.body.appendChild(hud);
+  let paused = false, t0 = performance.now(), tp = 0;
+  addEventListener('keydown', e => {
+    if (e.code === 'Space') { paused = !paused; t0 = performance.now() - tp * 1000; }
+    if (e.code === 'ArrowRight' || e.code === 'ArrowLeft') { paused = true; tp = (Math.round(tp / BEAT) + (e.code === 'ArrowRight' ? 1 : -1)) * BEAT; tp = ((tp % T) + T) % T; }
+  });
+  const fit = () => { const s = Math.min(innerWidth, innerHeight) / 1440; document.getElementById('stage').style.transform = `scale(${s})`; document.getElementById('stage').style.transformOrigin = '0 0'; };
+  addEventListener('resize', fit); fit();
+  ready.then(() => (function loop() {
+    if (!paused) tp = ((performance.now() - t0) / 1000) % T;
+    seek(tp); hud.textContent = `${tp.toFixed(2)} s · temps ${Math.floor(tp / BEAT) + 1}/28`;
+    requestAnimationFrame(loop);
+  })());
+} else ready.then(() => seek(0));
+</script>
+</body>
+</html>

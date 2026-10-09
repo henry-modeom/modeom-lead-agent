@@ -1,0 +1,519 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>MODEOM — module préfabriqué</title>
+<script type="importmap">{"imports":{"three":"__THREE__","three/room":"__ROOM__","springs":"__SPRINGS__"}}</script>
+<style>
+@font-face{font-family:Geist;src:url(__GEIST__) format("woff2");font-weight:100 900}
+@font-face{font-family:GeistMono;src:url(__MONO__) format("woff2");font-weight:400}
+:root{--bg:#EEECE8;--ink:#141414;--mute:#8A8782}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg);overflow:hidden}
+body{font-family:Geist,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+#stage{position:relative;width:1440px;height:1440px;background:var(--bg);overflow:hidden;transform-origin:0 0}
+#gl,#ov,#ui{position:absolute;left:0;top:0;width:1440px;height:1440px}
+#ov{pointer-events:none}
+.abs{position:absolute;left:0;top:0;transform-origin:0 0}
+.t{position:absolute;left:0;top:0;white-space:nowrap;line-height:1}
+.mono{font-family:GeistMono,monospace;font-variant-numeric:tabular-nums}
+svg{overflow:visible}
+#cursor{position:absolute;left:0;top:0;width:44px;height:44px;transform-origin:7.3px 4.6px;filter:drop-shadow(0 2px 2.5px rgba(0,0,0,.22))}
+#hud{position:fixed;left:12px;bottom:10px;font:12px GeistMono,monospace;color:#6b6b6b}
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="gl" width="1440" height="1440"></canvas>
+  <svg id="ov" width="1440" height="1440" viewBox="0 0 1440 1440"></svg>
+  <div id="ui">
+    <!-- en-tête -->
+    <div class="t" id="mark" style="transform:translate(64px,64px);font-size:17px;font-weight:650;letter-spacing:.24em;color:var(--ink)">MODEOM</div>
+    <div class="abs" id="captions" style="transform:translate(64px,96px)"></div>
+    <div class="t mono" id="note" style="transform:translate(1376px,66px) translateX(-100%);font-size:13px;color:var(--mute)">Maquette de principe · cotes indicatives*</div>
+
+    <!-- pastille contextuelle : slider → interrupteur → consigne -->
+    <div class="abs" id="chip" style="background:#fff;overflow:hidden">
+      <div class="abs" id="chipO">
+        <div class="abs" id="cSlider">
+          <div class="t" style="transform:translate(22px,-50%);font-size:17px;font-weight:520;color:var(--ink)">Écartement</div>
+          <div class="abs" id="sTrack" style="background:#ECEAE6"></div>
+          <div class="abs" id="sFill" style="background:#141414"></div>
+          <div class="t mono" id="sVal" style="font-size:14px;color:#555"></div>
+        </div>
+        <div class="abs" id="cToggle">
+          <div class="t" style="transform:translate(22px,-50%);font-size:17px;font-weight:520;color:var(--ink)">Armatures</div>
+          <div class="abs" id="tgTrack"></div>
+          <div class="abs" id="tgKnob" style="background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25)"></div>
+        </div>
+        <div class="abs" id="cHint">
+          <svg class="abs" width="22" height="22" viewBox="0 0 24 24" style="transform:translate(20px,-11px)" fill="none" stroke="#141414" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h16M8 8l-4 4 4 4M16 8l4 4-4 4"/></svg>
+          <div class="t" style="transform:translate(52px,-50%);font-size:17px;font-weight:520;color:var(--ink)">Glisser pour pivoter</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- barre d'onglets -->
+    <div class="abs" id="bar" style="background:#fff;border-radius:34px">
+      <div class="abs" id="tabsGray"></div>
+      <div class="abs" id="ind" style="background:#141414;overflow:hidden"><div class="abs" id="tabsInk"></div></div>
+    </div>
+
+    <!-- conclusion de marque (logo provisoire typographique) -->
+    <div class="abs" id="brand">
+      <div class="t" style="transform:translate(720px,0) translateX(-50%);font-size:64px;font-weight:620;letter-spacing:.28em;color:var(--ink);padding-left:.28em">MODEOM</div>
+      <div class="t mono" style="transform:translate(720px,88px) translateX(-50%);font-size:15px;letter-spacing:.18em;color:var(--mute)">CONSTRUCTION HORS-SITE · GROUPE FEDERALY</div>
+    </div>
+  </div>
+  <svg id="cursor" viewBox="0 0 24 24"><path d="M4 2.5V19.6l4.7-4.3 3 6.5 2.9-1.3-3-6.4h6.3z" fill="#141414" stroke="#fff" stroke-width="1.3" stroke-linejoin="round"/></svg>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { RoomEnvironment } from 'three/room';
+import { P, clamp, lerp, step, makeTrack, chain, makeVis } from 'springs';
+
+// ═════════════════════════ tempo ═════════════════════════
+const BPM = 120, BEAT = 60 / BPM, MEASURES = 12, T = MEASURES * 4 * BEAT;   // 24 s, 48 temps
+const b = n => (n - 1) * BEAT;
+const track = makeTrack(T), vis = makeVis(T);
+
+// ═════════════════════════ géométrie (HYPOTHÈSES — à remplacer par les plans) ═════════════════════════
+// Toutes les cotes en mètres. Aucune ouverture, aucun insert, aucune liaison : rien qui ne soit pas documenté.
+const G = {
+  L: 6.00,       // longueur hors tout*
+  W: 2.50,       // largeur hors tout*
+  H: 2.90,       // hauteur hors tout*
+  tFloor: 0.15,  // dalle de plancher*
+  tRoof: 0.15,   // dalle de toiture*
+  tWall: 0.12,   // voiles*
+  cover: 0.03,   // enrobage*
+  bar: 0.15,     // espacement des armatures*
+  barD: 0.012,   // diamètre*
+};
+const hw = G.H - G.tFloor - G.tRoof;
+// [nom, centre assemblé, dimensions, direction d'éclatement, distance à e = 1]
+const PARTS = [
+  ['floor', [0, G.tFloor / 2, 0], [G.L, G.tFloor, G.W], [0, 0, 0], 0],
+  ['wallS', [0, G.tFloor + hw / 2, G.W / 2 - G.tWall / 2], [G.L, hw, G.tWall], [0, 0, 1], 1.5],
+  ['wallN', [0, G.tFloor + hw / 2, -(G.W / 2 - G.tWall / 2)], [G.L, hw, G.tWall], [0, 0, -1], 1.5],
+  ['gableE', [G.L / 2 - G.tWall / 2, G.tFloor + hw / 2, 0], [G.tWall, hw, G.W - 2 * G.tWall], [1, 0, 0], 1.6],
+  ['gableW', [-(G.L / 2 - G.tWall / 2), G.tFloor + hw / 2, 0], [G.tWall, hw, G.W - 2 * G.tWall], [-1, 0, 0], 1.6],
+  ['roof', [0, G.H - G.tRoof / 2, 0], [G.L, G.tRoof, G.W], [0, 1, 0], 1.9],
+];
+
+// ═════════════════════════ partition ═════════════════════════
+// 1 Structure 0–4 s · 2 Éclaté 4–8 · 3 Coupe 8–12 · 4 Assemblage 12–16 · 5 Vues 16–20 · 6 Marque 20–24
+const SCENE_T = [0, b(9), b(17), b(25), b(33), b(41)];
+const TITLES = ['Structure', 'Vue éclatée', 'Coupe technique', 'Assemblage', 'Vues du module', 'MODEOM'];
+const TABS = ['Structure', 'Éclaté', 'Coupe', 'Assemblage', 'Vues'];
+
+// ── curseur (pixels écran)
+const CUR = [
+  [3.55, 572, 1302],                                  // onglet Éclaté
+  [4.12, 736, 1214], [4.50, 900, 1216], [5.00, 990, 1218], [5.50, 1012, 1219],  // slider, au-delà du max
+  [6.10, 1170, 1080], [7.55, 720, 1302],              // onglet Coupe
+  [8.58, 820, 1214], [9.15, 1160, 1010],              // interrupteur Armatures
+  [11.55, 868, 1302], [12.15, 1170, 1060],            // onglet Assemblage
+  [15.55, 1016, 1302],                                // onglet Vues
+  [16.08, 560, 700], [16.50, 880, 690],               // drag 1 → face
+  [17.56, 420, 724], [18.00, 1120, 704],              // drag 2 → côté
+  [19.10, 1540, 1480],
+];
+const curX = track(1540, CUR.map(([t, x]) => [t, x, P.cx]));
+const curY = track(1480, CUR.map(([t, , y]) => [t, y, P.cy]));
+const HOLD = { slider: [4.45, b(13)], orbit1: [16.45, b(36)], orbit2: [17.95, b(39)] };
+const CLICKS = [[b(9) - 0.1, b(9)], [b(17) - 0.1, b(17)], [b(19) - 0.1, b(19)], [b(25) - 0.1, b(25)], [b(33) - 0.1, b(33)]];
+const pressT = ivs => track(0, ivs.flatMap(([a, c]) => [[a, 1, P.fast], [c, 0, P.fast]]));
+const curPress = pressT([...CLICKS, HOLD.slider, HOLD.orbit1, HOLD.orbit2]);
+
+// ── barre d'onglets : chaque bord de l'indicateur a son ressort
+const BAR = { w: 760, h: 68, y: 1300, pad: 6 };
+const TABW = (BAR.w - 2 * BAR.pad) / 5;
+const tabL = i => 720 - BAR.w / 2 + BAR.pad + i * TABW;
+const tabEv = (edge) => [1, 2, 3, 4, 0].map((i, k) => {
+  const t = [b(9), b(17), b(25), b(33), b(45)][k];
+  const right = k < 4;                                   // l'indicateur avance vers la droite
+  const lead = (edge === 'R') === right;
+  return [t, tabL(i) + (edge === 'R' ? TABW : 0), lead ? P.lead : P.trail];
+});
+const indLt = track(tabL(0), tabEv('L')), indRt = track(tabL(0) + TABW, tabEv('R'));
+const barVis = t => vis(t, b(2), b(41));
+
+// ── slider « Écartement » : manipulation directe
+const CHIP_Y = 1212;
+const autoE = track(0, [[b(9), 0.35, P.ui], [b(25), 0, P.ui]]);
+const SL = { x0: 640, w: 220, h: 30 };          // piste en coordonnées écran (pastille de 480 centrée)
+const SPAN = SL.w - SL.h;
+function eRaw(t) {
+  const [g, r] = HOLD.slider;
+  if (t < g) return autoE(t);
+  const tt = Math.min(t, r), e0 = autoE(g);
+  return e0 + (curX(tt) - curX(g)) / SPAN;
+}
+const stretchHeld = t => { const over = Math.max(0, eRaw(t) - 1) * SPAN; return 64 * (1 - Math.exp(-over / 110)); };
+const stretch = chain(t => (t < HOLD.slider[0] ? 0 : stretchHeld(t)), [{ t: HOLD.slider[1], to: 0, p: P.back }]);
+// valeur d'écartement : pilotée par le curseur tant qu'il tient, conservée au relâchement
+const eUI = t => (t < HOLD.slider[0] ? autoE(t) : t < b(25) ? clamp(eRaw(t)) : clamp(eRaw(HOLD.slider[1])));
+// assemblage : chaque pièce revient par ressort depuis là où elle est, dans l'ordre de montage
+const ASM = { floor: b(25), wallS: b(26), wallN: b(26), gableE: b(27), gableW: b(27), roof: b(28) };
+const ePart = Object.fromEntries(PARTS.map(([n]) => [n, chain(t => (t < b(25) ? eUI(t) : clamp(eRaw(HOLD.slider[1]))), [{ t: ASM[n], to: 0, p: P.part }])]));
+
+// ── interrupteur « Armatures » : bords du bouton sur ressorts distincts
+const TG = { w: 60, h: 34, cx: 820 };
+const tgOn = track(0, [[b(19), 1, P.ui], [b(25), 0, P.ui]]);
+const kL = track(0, [[b(19), 26, P.trail], [b(25), 0, P.lead]]);
+const kR = track(30, [[b(19) - 0.1, 38, P.fast], [b(19), 56, P.lead], [b(25), 30, P.trail]]);
+
+// ── pastille contextuelle : une seule forme qui change de taille
+const chipW = track(160, [[b(9), 480], [b(17), 300], [b(33), 300], [b(41), 160]]);
+const chipH = track(48, [[b(9), 60], [b(17), 60], [b(33), 56], [b(41), 48]]);
+const chipO = t => vis(t, b(9), b(41)).o;
+
+// ── coupe et armatures
+const cutX = track(6, [[b(17), 0.6, P.slow], [b(25), 6, P.slow]]);
+const rebar = t => vis(t, b(19) + 0.05, b(25)).o;
+
+// ── révélation (plan de coupe horizontal qui monte, puis redescend en fin de boucle)
+const reveal = track(-0.05, [[0.0, G.H + 0.3, { w: 2.6, z: 1 }], [b(9), 9, P.fast], [b(41), G.H + 0.3, P.fast], [22.4, -0.05, { w: 3.2, z: 1 }]]);
+
+// ── caméra : orbite autour d'une cible ; les drags s'ajoutent par-dessus
+const CAM = {
+  brand: [-38, 22, 19.5, 0, 0.55, 0], s1a: [-62, 20, 17.5, 0, 1.3, 0], s1b: [-36, 24, 17, 0, 1.3, 0],
+  ecl: [-30, 33, 27, 0, 1.9, 0], cut: [70, 9, 9.2, 0.6, 1.3, 1.2], asm: [-34, 24, 18.5, 0, 1.8, 0],
+  iso: [-34, 22, 17, 0, 1.3, 0], face: [0, 6, 16, 0, 1.4, 0], side: [90, 6, 13.5, 0, 1.4, 0],
+  detail: [52, 12, 10.5, 1.6, 1.35, 0.4],
+};
+const CAMSEQ = [[0.0, 's1a'], [b(5), 's1b'], [b(9), 'ecl'], [b(17), 'cut'], [b(25), 'asm'], [b(33), 'iso'],
+  [b(36), 'face'], [b(39), 'side'], [b(40), 'detail'], [b(42), 'brand']];
+// la distance réagit plus vite que l'orbite : la caméra recule avant de tourner, sans frôler les pièces
+const cam = [0, 1, 2, 3, 4, 5].map(k => track(CAM.brand[k], CAMSEQ.map(([t, s]) => [t, CAM[s][k], k === 2 ? { w: 7, z: 1 } : P.cam])));
+// orbite à la main : tenue → azimut calculé depuis le curseur ; relâchée → ressort vers la vue cible
+const DEG_PX = 0.12;
+const heldAz = (hold) => t => cam[0](hold[0]) + (curX(t) - curX(hold[0])) * DEG_PX - cam[0](t);
+const azDrag = chain(() => 0, [
+  { t: HOLD.orbit1[0], f: heldAz(HOLD.orbit1) }, { t: HOLD.orbit1[1], to: 0, p: P.back },
+  { t: HOLD.orbit2[0], f: heldAz(HOLD.orbit2) }, { t: HOLD.orbit2[1], to: 0, p: P.back },
+]);
+
+// ═════════════════════════ scène 3D ═════════════════════════
+const canvas = document.getElementById('gl');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1);
+renderer.setSize(1440, 1440, false);
+renderer.localClippingEnabled = true;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.NeutralToneMapping;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+const scene = new THREE.Scene();
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environmentIntensity = 0.55;
+const camera = new THREE.PerspectiveCamera(28, 1, 0.1, 200);
+
+const sun = new THREE.DirectionalLight(0xffffff, 2.2);
+sun.position.set(-7, 13, 9);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -9, right: 9, top: 9, bottom: -9, near: 1, far: 40 });
+sun.shadow.radius = 10;
+sun.shadow.bias = -0.0004;
+scene.add(sun, new THREE.HemisphereLight(0xffffff, 0xd8d4cc, 0.6));
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), new THREE.ShadowMaterial({ color: 0x3a3226, opacity: 0.11 }));
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// texture béton : bruit déterministe (graine fixe)
+function concreteTex() {
+  const c = document.createElement('canvas'); c.width = c.height = 512;
+  const g = c.getContext('2d'), img = g.createImageData(512, 512);
+  let s = 1234567;
+  const rnd = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
+  for (let i = 0; i < 512 * 512; i++) {
+    const v = 228 + (rnd() - 0.5) * 22 + (rnd() < 0.004 ? -40 : 0);
+    img.data.set([v, v - 2, v - 5, 255], i * 4);
+  }
+  g.putImageData(img, 0, 0);
+  const tx = new THREE.CanvasTexture(c);
+  tx.wrapS = tx.wrapT = THREE.RepeatWrapping; tx.repeat.set(3, 3); tx.colorSpace = THREE.SRGBColorSpace;
+  return tx;
+}
+function hatchTex() {
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d');
+  g.fillStyle = '#A9A49B'; g.fillRect(0, 0, 64, 64);
+  g.strokeStyle = '#5E5952'; g.lineWidth = 3;
+  for (let k = -64; k < 128; k += 21.34) { g.beginPath(); g.moveTo(k, 64); g.lineTo(k + 64, 0); g.stroke(); }
+  const tx = new THREE.CanvasTexture(c);
+  tx.wrapS = tx.wrapT = THREE.RepeatWrapping; tx.colorSpace = THREE.SRGBColorSpace;
+  return tx;
+}
+const revealPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0);
+const cutPlane = new THREE.Plane(new THREE.Vector3(-1, 0, 0), 6);
+const concrete = new THREE.MeshStandardMaterial({ color: 0xd2cec7, map: concreteTex(), roughness: 0.88, metalness: 0,
+  clippingPlanes: [revealPlane, cutPlane], shadowSide: THREE.DoubleSide });
+const edgeMat = new THREE.LineBasicMaterial({ color: 0x2a2724, transparent: true, opacity: 0.32, clippingPlanes: [revealPlane, cutPlane] });
+const hatch = hatchTex();
+const capMat = new THREE.MeshBasicMaterial({ map: hatch, toneMapped: false, clippingPlanes: [revealPlane], side: THREE.DoubleSide });
+
+const meshes = {};
+for (const [name, c, s] of PARTS) {
+  const geo = new THREE.BoxGeometry(...s);
+  const m = new THREE.Mesh(geo, concrete);
+  m.castShadow = m.receiveShadow = true;
+  m.add(new THREE.LineSegments(new THREE.EdgesGeometry(geo), edgeMat));
+  scene.add(m); meshes[name] = m;
+}
+// faces de coupe (une par pièce, positionnée chaque image)
+const caps = {};
+for (const [name] of PARTS) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), capMat.clone());
+  m.material.map = hatch.clone(); m.material.map.needsUpdate = true;
+  m.material.clippingPlanes = [revealPlane];            // clone() copierait le plan figé
+  m.rotation.y = Math.PI / 2;
+  scene.add(m); caps[name] = m;
+}
+// armatures : barres longitudinales vues en section (disques dans le plan de coupe)
+const barGeo = new THREE.CylinderGeometry(G.barD / 2 * 1.4, G.barD / 2 * 1.4, 0.006, 16).rotateZ(Math.PI / 2);
+const barMat = new THREE.MeshStandardMaterial({ color: 0x262421, roughness: 0.45, metalness: 0.5, transparent: true, clippingPlanes: [revealPlane] });
+// positions des barres dans le plan (y, z) relatives au centre de chaque pièce
+const REBARS = {};
+{
+  const slab = th => { const out = []; for (let z = -G.W / 2 + G.cover; z <= G.W / 2 - G.cover + 1e-6; z += G.bar) for (const y of [-th / 2 + G.cover, th / 2 - G.cover]) out.push([y, z]); return out; };
+  const wall = () => { const out = []; for (let y = -hw / 2 + G.cover; y <= hw / 2 - G.cover + 1e-6; y += G.bar) for (const z of [-G.tWall / 2 + G.cover, G.tWall / 2 - G.cover]) out.push([y, z]); return out; };
+  REBARS.floor = slab(G.tFloor); REBARS.roof = slab(G.tRoof); REBARS.wallS = wall(); REBARS.wallN = wall();
+}
+const NBARS = Object.values(REBARS).reduce((a, l) => a + l.length, 0);
+const bars = new THREE.InstancedMesh(barGeo, barMat, NBARS);
+scene.add(bars);
+
+// ═════════════════════════ calque 2D (SVG) ═════════════════════════
+const NS = 'http://www.w3.org/2000/svg';
+const ov = document.getElementById('ov');
+const el = (tag, attrs, parent = ov) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); parent.appendChild(e); return e; };
+const v3 = new THREE.Vector3();
+const proj = (x, y, z) => { v3.set(x, y, z).project(camera); return [(v3.x + 1) * 720, (1 - v3.y) * 720]; };
+
+function makeDim(text) {
+  const g = el('g', { 'font-family': 'GeistMono', 'font-size': 17, fill: '#141414' });
+  return { g, line: el('line', { stroke: '#141414', 'stroke-width': 1.4 }, g), t1: el('line', { stroke: '#141414', 'stroke-width': 1.4 }, g),
+    t2: el('line', { stroke: '#141414', 'stroke-width': 1.4 }, g), bg: el('rect', { fill: '#EEECE8', rx: 4 }, g),
+    txt: Object.assign(el('text', { 'text-anchor': 'middle', 'dominant-baseline': 'central' }, g), { textContent: text }) };
+}
+function drawDim(d, a, c, o) {
+  d.g.style.display = o < 0.003 ? 'none' : ''; if (o < 0.003) return;
+  d.g.setAttribute('opacity', o);
+  const [x1, y1] = proj(...a), [x2, y2] = proj(...c);
+  const k = clamp(o * 1.4);                               // la ligne se trace depuis le milieu
+  const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+  const ax = lerp(mx, x1, k), ay = lerp(my, y1, k), bx = lerp(mx, x2, k), by = lerp(my, y2, k);
+  d.line.setAttribute('x1', ax); d.line.setAttribute('y1', ay); d.line.setAttribute('x2', bx); d.line.setAttribute('y2', by);
+  const len = Math.hypot(x2 - x1, y2 - y1) || 1, nx = -(y2 - y1) / len * 7, ny = (x2 - x1) / len * 7;
+  for (const [tk, x, y] of [[d.t1, ax, ay], [d.t2, bx, by]]) { tk.setAttribute('x1', x - nx); tk.setAttribute('y1', y - ny); tk.setAttribute('x2', x + nx); tk.setAttribute('y2', y + ny); }
+  const w = d.txt.textContent.length * 10.5 + 14;
+  d.bg.setAttribute('x', mx - w / 2); d.bg.setAttribute('y', my - 13); d.bg.setAttribute('width', w); d.bg.setAttribute('height', 26);
+  d.txt.setAttribute('x', mx); d.txt.setAttribute('y', my);
+}
+function makeLabel(title, sub) {
+  const g = el('g', {});
+  const L = { g, line: el('polyline', { fill: 'none', stroke: '#141414', 'stroke-width': 1.3 }, g), dot: el('circle', { r: 4.5, fill: '#141414' }, g),
+    title: Object.assign(el('text', { 'font-family': 'Geist', 'font-size': 20, 'font-weight': 560, fill: '#141414' }, g), { textContent: title }),
+    sub: Object.assign(el('text', { 'font-family': 'GeistMono', 'font-size': 15, fill: '#6E6A64' }, g), { textContent: sub }) };
+  return L;
+}
+// étiquette : point d'ancrage 3D, coude, texte ; entre/sort avec un léger flou
+function drawLabel(L, anchor, dx, dy, v) {
+  L.g.style.display = v.o < 0.003 ? 'none' : ''; if (v.o < 0.003) return;
+  const [x, y] = proj(...anchor), k = (1 - v.p) + v.e;
+  L.g.setAttribute('opacity', v.o);
+  L.g.style.filter = k > 0.02 ? `blur(${(3 * k).toFixed(2)}px)` : 'none';
+  const ex = x + dx * clamp(v.p * 1.2), ey = y + dy * clamp(v.p * 1.2), side = dx >= 0 ? 1 : -1;
+  const hx = ex + side * 24;
+  L.line.setAttribute('points', `${x},${y} ${ex},${ey} ${hx},${ey}`);
+  L.dot.setAttribute('cx', x); L.dot.setAttribute('cy', y);
+  const anchorTxt = side > 0 ? 'start' : 'end', tx = hx + side * 10;
+  for (const [n, yy] of [[L.title, ey - 4], [L.sub, ey + 18]]) { n.setAttribute('x', tx); n.setAttribute('y', yy); n.setAttribute('text-anchor', anchorTxt); }
+}
+
+const DIMS = [makeDim('6,00 m*'), makeDim('2,50 m*'), makeDim('2,90 m*')];
+const PLABEL = {
+  roof: makeLabel('Dalle de toiture', 'ép. 150 mm*'), wallS: makeLabel('Voiles longitudinaux', 'ép. 120 mm*'),
+  gableW: makeLabel('Voiles pignons', 'ép. 120 mm*'), floor: makeLabel('Dalle de plancher', 'ép. 150 mm*'),
+};
+const SLABEL = [makeLabel('Voile longitudinal', 'ép. 120 mm*'), makeLabel('Dalle de plancher', 'ép. 150 mm*'), makeLabel('Armatures', 'HA12 · 2 nappes · 15 cm*'), makeLabel('Enrobage', '30 mm*')];
+
+// ═════════════════════════ interface ═════════════════════════
+const $ = id => document.getElementById(id);
+const tabHTML = color => TABS.map((s, i) => `<div class="t" style="color:${color};font-size:18px;font-weight:540;transform:translate(${(BAR.pad + (i + 0.5) * TABW).toFixed(1)}px,${BAR.h / 2}px) translate(-50%,-50%)">${s}</div>`).join('');
+$('tabsGray').innerHTML = tabHTML('#8A8782');
+$('tabsInk').innerHTML = tabHTML('#FFFFFF');
+$('captions').innerHTML = TITLES.map((s, i) => `<div class="abs cap" style="display:none"><div class="t mono" style="font-size:14px;color:var(--mute)">0${i + 1} / 06</div><div class="t" style="transform:translate(0,24px);font-size:30px;font-weight:560;letter-spacing:-.01em;color:var(--ink)">${s}</div></div>`).join('');
+const CAPS = [...document.querySelectorAll('.cap')];
+const px = n => `${n.toFixed(2)}px`;
+function setLayer(e, v, o = {}) {
+  if (v.o < 0.003) { e.style.display = 'none'; return false; }
+  const k = (1 - v.p) + v.e, bl = (o.blur ?? 4) * k;
+  e.style.display = ''; e.style.opacity = v.o.toFixed(4);
+  e.style.filter = bl > 0.04 ? `blur(${bl.toFixed(2)}px)` : 'none';
+  e.style.transform = `translate(${px(o.x || 0)},${px((o.y || 0) + (o.dy ?? 4) * ((1 - v.p) - v.e))})`;
+  return true;
+}
+const rr = (e, x, y, w, h, r) => { e.style.width = px(w); e.style.height = px(h); e.style.borderRadius = px(Math.min(r, w / 2, h / 2)); e.style.transform = `translate(${px(x)},${px(y)})`; };
+const mixHex = (a, c, k) => { k = clamp(k); const A = [a >> 16, (a >> 8) & 255, a & 255], C = [c >> 16, (c >> 8) & 255, c & 255]; return `rgb(${A.map((v, i) => Math.round(lerp(v, C[i], k))).join(',')})`; };
+
+// ═════════════════════════ seek(t) ═════════════════════════
+const dummy = new THREE.Object3D();
+function seek(t) {
+  t = ((t % T) + T) % T;
+
+  // caméra
+  const az = (cam[0](t) + azDrag(t)) * Math.PI / 180, el_ = cam[1](t) * Math.PI / 180, d = cam[2](t);
+  const tx = cam[3](t), ty = cam[4](t), tz = cam[5](t);
+  camera.position.set(tx + d * Math.sin(az) * Math.cos(el_), ty + d * Math.sin(el_), tz + d * Math.cos(az) * Math.cos(el_));
+  camera.lookAt(tx, ty, tz);
+  camera.updateMatrixWorld();
+
+  // pièces
+  const box = {};
+  for (const [n, c, s, dir, dist] of PARTS) {
+    const e = ePart[n](t), m = meshes[n];
+    m.position.set(c[0] + dir[0] * dist * e, c[1] + dir[1] * dist * e, c[2] + dir[2] * dist * e);
+    box[n] = { c: m.position.clone(), s };
+  }
+  revealPlane.constant = reveal(t);
+  const xc = cutX(t);
+  cutPlane.constant = xc;
+
+  // faces de coupe + armatures
+  let bi = 0;
+  const rb = rebar(t);
+  for (const [n] of PARTS) {
+    const { c, s } = box[n], cap = caps[n];
+    const hit = c.x - s[0] / 2 < xc && xc < c.x + s[0] / 2 && xc < G.L / 2 + 2;
+    cap.visible = hit;
+    if (hit) {
+      cap.position.set(xc + 0.001, c.y, c.z); cap.scale.set(s[2], s[1], 1);
+      cap.material.map.repeat.set(s[2] / 0.2, s[1] / 0.2);
+    }
+    for (const [y, z] of REBARS[n] || []) {
+      dummy.position.set(xc + 0.003, c.y + y, c.z + z);
+      dummy.scale.setScalar(hit && rb > 0.003 ? 0.3 + 0.7 * rb : 0);
+      dummy.updateMatrix(); bars.setMatrixAt(bi++, dummy.matrix);
+    }
+  }
+  bars.instanceMatrix.needsUpdate = true;
+  barMat.opacity = rb;
+
+  renderer.render(scene, camera);
+
+  // ── calque : cotes (scène 1)
+  const off = 0.45;
+  drawDim(DIMS[0], [-G.L / 2, 0, G.W / 2 + off], [G.L / 2, 0, G.W / 2 + off], vis(t, b(6), b(9)).o);
+  drawDim(DIMS[1], [G.L / 2 + off, 0, G.W / 2], [G.L / 2 + off, 0, -G.W / 2], vis(t, b(7), b(9)).o);
+  drawDim(DIMS[2], [G.L / 2 + off, 0, -G.W / 2], [G.L / 2 + off, G.H, -G.W / 2], vis(t, b(8), b(9)).o);
+
+  // ── étiquettes des pièces (scène 2)
+  const bc = n => box[n].c;
+  drawLabel(PLABEL.roof, [bc('roof').x - 1.6, bc('roof').y + G.tRoof / 2, bc('roof').z], -120, -70, vis(t, b(13), b(17)));
+  drawLabel(PLABEL.wallS, [bc('wallS').x + 1.1, bc('wallS').y + 0.5, bc('wallS').z + G.tWall / 2], 120, 90, vis(t, b(14), b(17)));
+  drawLabel(PLABEL.gableW, [bc('gableW').x - G.tWall / 2, bc('gableW').y + 0.7, bc('gableW').z], -60, -140, vis(t, b(15), b(17)));
+  drawLabel(PLABEL.floor, [bc('floor').x - 1.2, G.tFloor, bc('floor').z - 0.4], -150, 150, vis(t, b(16), b(17)));
+
+  // ── étiquettes de coupe (scène 3)
+  const wS = bc('wallS'), rf = bc('roof'), fl = bc('floor');
+  drawLabel(SLABEL[0], [xc, wS.y + 0.5, wS.z], 170, -60, vis(t, b(21), b(25)));
+  drawLabel(SLABEL[1], [xc, fl.y, fl.z - 0.45], 70, -150, vis(t, b(22), b(25)));
+  drawLabel(SLABEL[2], [xc, fl.y + G.tFloor / 2 - G.cover, fl.z + 0.57], 30, -240, vis(t, b(23), b(25)));
+  drawLabel(SLABEL[3], [xc, wS.y - 0.6, wS.z - G.tWall / 2 + G.cover], 170, 40, vis(t, b(24), b(25)));
+
+  // ── en-tête
+  const hv = vis(t, b(47) + 0.3, b(41) + T);
+  setLayer($('mark'), hv, { x: 64, y: 64, dy: 0 });
+  setLayer($('note'), hv, { x: 1376, y: 66, dy: 0 });
+  $('note').style.transform += ' translateX(-100%)';
+  CAPS.forEach((c, i) => (i < 5 ? setLayer(c, vis(t, SCENE_T[i] + 0.1, SCENE_T[i + 1]), { dy: 8 }) : (c.style.display = 'none')));
+
+  // ── barre d'onglets
+  const bv = barVis(t), bar = $('bar');
+  if (bv.o > 0.003) {
+    bar.style.display = ''; bar.style.opacity = bv.o;
+    bar.style.boxShadow = '0 1px 2px rgba(0,0,0,.06), 0 12px 32px rgba(40,30,20,.10)';
+    bar.style.width = px(BAR.w); bar.style.height = px(BAR.h);
+    bar.style.transform = `translate(${px(720 - BAR.w / 2)},${px(BAR.y - BAR.h / 2 + 24 * ((1 - bv.p) + bv.e))})`;
+    const L = indLt(t) - (720 - BAR.w / 2), R = indRt(t) - (720 - BAR.w / 2);
+    rr($('ind'), L, BAR.pad, R - L, BAR.h - 2 * BAR.pad, 40);
+    $('tabsInk').style.transform = `translate(${px(-L)},${px(-BAR.pad)})`;
+  } else bar.style.display = 'none';
+
+  // ── pastille contextuelle
+  const chip = $('chip'), co = vis(t, b(9), b(41));
+  if (co.o > 0.003) {
+    const st = stretch(t), w = chipW(t) + st, h = chipH(t) - st * 0.08, left = 720 - chipW(t) / 2;
+    chip.style.display = ''; chip.style.opacity = co.o;
+    chip.style.boxShadow = '0 1px 2px rgba(0,0,0,.06), 0 10px 26px rgba(40,30,20,.10)';
+    rr(chip, left, CHIP_Y - h / 2 + 18 * (1 - co.p), w, h, 30);
+    $('chipO').style.transform = `translate(0,${px(h / 2)})`;
+    // slider
+    if (setLayer($('cSlider'), vis(t, b(9) + 0.08, b(17)))) {
+      const e = eUI(t), tl = SL.x0 - left;
+      rr($('sTrack'), tl, -SL.h / 2, SL.w + st, SL.h, SL.h / 2);
+      rr($('sFill'), tl, -SL.h / 2, SL.h + e * (SPAN + st), SL.h, SL.h / 2);
+      $('sVal').textContent = `${Math.round(e * 100)} %`;
+      $('sVal').style.transform = `translate(${px(w - 22)},0) translate(-100%,-50%)`;
+    }
+    // interrupteur
+    if (setLayer($('cToggle'), vis(t, b(17) + 0.08, b(33)))) {
+      const x0 = TG.cx - TG.w / 2 - left;
+      const tr = $('tgTrack'); rr(tr, x0, -TG.h / 2, TG.w, TG.h, TG.h / 2); tr.style.background = mixHex(0xD9D6D0, 0x141414, tgOn(t));
+      const L = kL(t), R = Math.max(kR(t), L + 10);
+      rr($('tgKnob'), x0 + 2 + L, -TG.h / 2 + 2, R - L, TG.h - 4, 15);
+    }
+    setLayer($('cHint'), vis(t, b(33) + 0.08, b(41)));
+  } else chip.style.display = 'none';
+
+  // ── marque
+  setLayer($('brand'), vis(t, b(43), b(47) + 0.2), { y: 1160, dy: 10, blur: 6 });
+
+  // ── curseur
+  const cp = curPress(t);
+  $('cursor').style.transform = `translate(${px(curX(t) - 7.3)},${px(curY(t) - 4.6)}) scale(${(1 - 0.12 * cp).toFixed(4)})`;
+}
+
+window.T = T; window.BEAT = BEAT; window.seek = seek;
+window.__dbg = () => JSON.stringify(Object.entries(caps).map(([n, c]) => [n, c.visible, c.position.toArray().map(v => +v.toFixed(2)), c.scale.toArray().map(v => +v.toFixed(2)), c.material.clippingPlanes.length]));
+window.ready = document.fonts.ready.then(() => Promise.all([document.fonts.load('20px Geist'), document.fonts.load('15px GeistMono')]));
+
+// ═════════════════════════ modes ═════════════════════════
+// ?render : piloté par Playwright · ?scroll : le défilement est la timeline · sinon : lecture en boucle
+const q = location.search, stage = $('stage');
+const fit = () => { const s = Math.min(innerWidth, innerHeight) / 1440; stage.style.transform = `scale(${s})`; stage.style.left = `${(innerWidth - 1440 * s) / 2}px`; };
+if (/render/.test(q)) ready.then(() => seek(0));
+else if (/scroll/.test(q)) {
+  stage.style.position = 'fixed'; stage.style.top = '0';
+  document.documentElement.style.overflowY = 'auto'; document.body.style.height = '800vh'; document.body.style.overflow = 'visible';
+  addEventListener('resize', fit); fit();
+  const go = () => seek(clamp(scrollY / (document.body.scrollHeight - innerHeight)) * (T - 1e-3));
+  addEventListener('scroll', () => requestAnimationFrame(go)); ready.then(go);
+} else {
+  stage.style.position = 'absolute';
+  addEventListener('resize', fit); fit();
+  const hud = document.createElement('div'); hud.id = 'hud'; document.body.appendChild(hud);
+  let paused = false, t0 = performance.now(), tp = 0;
+  addEventListener('keydown', e => {
+    if (e.code === 'Space') { paused = !paused; t0 = performance.now() - tp * 1000; }
+    if (e.code === 'ArrowRight' || e.code === 'ArrowLeft') { paused = true; tp = (((Math.round(tp / BEAT) + (e.code === 'ArrowRight' ? 1 : -1)) * BEAT) % T + T) % T; }
+  });
+  ready.then(() => (function loop() {
+    if (!paused) tp = ((performance.now() - t0) / 1000) % T;
+    seek(tp); hud.textContent = `${tp.toFixed(2)} s · temps ${Math.floor(tp / BEAT) + 1}/48`;
+    requestAnimationFrame(loop);
+  })());
+}
+
+</script>
+</body>
+</html>
